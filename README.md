@@ -233,14 +233,61 @@ Config file: `~/.picoagent/config.json`
 
 ### Providers
 
-picoagent separates out its fast embedding providers from its chat providers.
+picoagent separates out its fast embedding providers from its chat providers. This allows you to mix and match (e.g., fast Groq Chat with high-dimension OpenAI Embeddings).
 
 | Provider | Purpose | Get API Key |
 |----------|---------|-------------|
-| `groq` | Chat (Fastest LLM) | [console.groq.com](https://console.groq.com) |
-| `openai` | Embeddings / Chat | [platform.openai.com](https://platform.openai.com) |
-| `anthropic` | Chat (Claude) | [console.anthropic.com](https://console.anthropic.com) |
-| `ollama` | Local LLM | Localhost |
+| `custom` | Any OpenAI-compatible endpoint | — |
+| `openrouter` | LLM (recommended, access to all models) | [openrouter.ai](https://openrouter.ai) |
+| `anthropic` | LLM (Claude direct) | [console.anthropic.com](https://console.anthropic.com) |
+| `openai` | LLM + Embeddings (GPT direct) | [platform.openai.com](https://platform.openai.com) |
+| `deepseek` | LLM (DeepSeek direct) | [platform.deepseek.com](https://platform.deepseek.com) |
+| `groq` | LLM (Fastest LLM) | [console.groq.com](https://console.groq.com) |
+| `gemini` | LLM (Gemini direct) | [aistudio.google.com](https://aistudio.google.com) |
+| `vllm` | LLM (local, any OpenAI-compatible server) | — |
+
+<details>
+<summary><b>Custom Provider (Any OpenAI-compatible API)</b></summary>
+
+Connects directly to any OpenAI-compatible endpoint — LM Studio, llama.cpp, Together AI, Fireworks, Azure OpenAI, or any self-hosted server.
+
+Set your configuration like so:
+
+```json
+{
+  "provider": "custom",
+  "base_url": "https://api.your-provider.com/v1",
+  "chat_model": "your-model-name",
+  "api_key": "your-api-key"
+}
+```
+
+> For local servers that don't require a key, set `api_key` to any non-empty string (e.g. `"no-key"`).
+
+</details>
+
+<details>
+<summary><b>Adding a New Provider (Developer Guide)</b></summary>
+
+Unlike bloated frameworks that rely on large 3rd-party dependencies like `litellm`, picoagent manages its routing directly via a lightweight **Provider Registry** (`picoagent/providers/registry.py`) for maximum performance and security.
+
+Adding a new provider takes just 1 easy step.
+
+**Step 1.** Add a `ProviderSpec` entry to `_default_specs` in `picoagent/providers/registry.py`:
+
+```python
+ProviderSpec(
+    name="myprovider",                   # config field name
+    base_url="https://api.myprovider.com/v1", # endpoint
+    default_chat_model="my-chat-model",  # default model
+    default_embedding_model="my-embed-model", # fallback embeddings
+    api_key_env="MYPROVIDER_API_KEY",    # env var mapping
+)
+```
+
+That's it! picoagent will now treat `myprovider` as a native, globally accessible LLM option for all your agents.
+
+</details>
 
 ### MCP (Model Context Protocol)
 
