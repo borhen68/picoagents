@@ -3,9 +3,11 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import shutil
 from pathlib import Path
 from typing import Any
+
 
 from picoagent.channels import (
     CLIChannel,
@@ -126,78 +128,88 @@ async def run_gateway(config: AgentConfig) -> None:
         return turn.text
 
     adapters = []
-    for name in config.enabled_channels:
-        lname = name.lower()
-        settings = config.channel_config(lname)
 
-        if lname == "cli":
-            adapters.append(CLIChannel())
-        elif lname == "telegram":
-            allowed_chat_ids = _as_str_set(settings.get("allowed_chat_ids"))
-            adapters.append(
-                TelegramChannel(
-                    token=config.channel_token("telegram", env_var="TELEGRAM_BOT_TOKEN")
-                    or _as_str(settings.get("token")),
-                    poll_seconds=_as_float(settings.get("poll_seconds"), config.channel_poll_seconds),
-                    allowed_chat_ids=allowed_chat_ids,
-                    reply_to_message=_as_bool(settings.get("reply_to_message"), True),
-                )
+    # CLI channel
+    if "cli" in (config.channels.enabled_names or []):
+        adapters.append(CLIChannel())
+
+    # Telegram
+    tg = config.channels.telegram
+    if tg.enabled:
+        adapters.append(
+            TelegramChannel(
+                token=tg.token or os.getenv("TELEGRAM_BOT_TOKEN"),
+                poll_seconds=tg.poll_seconds,
+                allowed_chat_ids=set(tg.allow_from) if tg.allow_from else None,
+                reply_to_message=tg.reply_to_message,
             )
-        elif lname == "discord":
-            adapters.append(
-                DiscordChannel(
-                    token=config.channel_token("discord", env_var="DISCORD_BOT_TOKEN")
-                    or _as_str(settings.get("token")),
-                    channel_id=_as_str(settings.get("channel_id")),
-                    poll_seconds=_as_float(settings.get("poll_seconds"), config.channel_poll_seconds),
-                    reply_as_reply=_as_bool(settings.get("reply_as_reply"), True),
-                )
+        )
+
+    # Discord
+    dc = config.channels.discord
+    if dc.enabled:
+        adapters.append(
+            DiscordChannel(
+                token=dc.token or os.getenv("DISCORD_BOT_TOKEN"),
+                channel_id=dc.channel_id or None,
+                poll_seconds=dc.poll_seconds,
+                reply_as_reply=dc.reply_as_reply,
             )
-        elif lname == "slack":
-            adapters.append(
-                SlackChannel(
-                    token=config.channel_token("slack", env_var="SLACK_BOT_TOKEN") or _as_str(settings.get("token")),
-                    channel_id=_as_str(settings.get("channel_id")),
-                    poll_seconds=_as_float(settings.get("poll_seconds"), config.channel_poll_seconds),
-                    reply_in_thread=_as_bool(settings.get("reply_in_thread"), True),
-                )
+        )
+
+    # Slack
+    sl = config.channels.slack
+    if sl.enabled:
+        adapters.append(
+            SlackChannel(
+                token=sl.token or os.getenv("SLACK_BOT_TOKEN"),
+                channel_id=sl.channel_id or None,
+                poll_seconds=sl.poll_seconds,
+                reply_in_thread=sl.reply_in_thread,
             )
-        elif lname == "whatsapp":
-            inbox_default = str(Path.home() / ".picoagent" / "whatsapp_inbox.jsonl")
-            adapters.append(
-                WhatsAppChannel(
-                    access_token=config.channel_token("whatsapp", env_var="WHATSAPP_ACCESS_TOKEN")
-                    or _as_str(settings.get("access_token")),
-                    phone_number_id=_as_str(settings.get("phone_number_id")),
-                    inbox_path=_as_str(settings.get("inbox_path")) or inbox_default,
-                    outbox_path=_as_str(settings.get("outbox_path")),
-                    cursor_path=_as_str(settings.get("cursor_path")),
-                    bridge_url=_as_str(settings.get("bridge_url", config.whatsapp_bridge_url)),
-                    bridge_token=_as_str(settings.get("bridge_token", config.whatsapp_bridge_token)),
-                    poll_seconds=_as_float(settings.get("poll_seconds"), config.channel_poll_seconds),
-                )
+        )
+
+    # WhatsApp
+    wa = config.channels.whatsapp
+    if wa.enabled:
+        inbox_default = str(Path.home() / ".picoagent" / "whatsapp_inbox.jsonl")
+        adapters.append(
+            WhatsAppChannel(
+                access_token=os.getenv("WHATSAPP_ACCESS_TOKEN"),
+                phone_number_id=None,
+                inbox_path=inbox_default,
+                outbox_path=None,
+                cursor_path=None,
+                bridge_url=wa.bridge_url,
+                bridge_token=wa.bridge_token or None,
+                poll_seconds=wa.poll_seconds,
             )
-        elif lname == "email":
-            adapters.append(
-                EmailChannel(
-                    username=_as_str(settings.get("username")),
-                    password=_as_str(settings.get("password")),
-                    imap_host=_as_str(settings.get("imap_host")),
-                    smtp_host=_as_str(settings.get("smtp_host")),
-                    from_address=_as_str(settings.get("from_address")),
-                    imap_port=_as_int(settings.get("imap_port"), 993),
-                    smtp_port=_as_int(settings.get("smtp_port"), 587),
-                    folder=_as_str(settings.get("folder")) or "INBOX",
-                    poll_seconds=_as_float(settings.get("poll_seconds"), max(config.channel_poll_seconds, 10.0)),
-                    use_tls=_as_bool(settings.get("use_tls"), True),
-                    use_ssl=_as_bool(settings.get("use_ssl"), False),
-                )
+        )
+
+    # Email
+    em = config.channels.email
+    if em.enabled:
+        adapters.append(
+            EmailChannel(
+                username=em.username or None,
+                password=em.password or None,
+                imap_host=em.imap_host or None,
+                smtp_host=em.smtp_host or None,
+                from_address=em.from_address or None,
+                imap_port=em.imap_port,
+                smtp_port=em.smtp_port,
+                folder=em.folder,
+                poll_seconds=em.poll_seconds,
+                use_tls=em.use_tls,
+                use_ssl=em.use_ssl,
             )
-        else:
-            raise RuntimeError(f"Unsupported channel: {name}")
+        )
 
     if not adapters:
-        raise RuntimeError("No channels enabled. Update config.enabled_channels.")
+        raise RuntimeError(
+            "No channels enabled. Set 'enabled: true' under the channel in config.json.\n"
+            "Example: {\"channels\": {\"telegram\": {\"enabled\": true, \"token\": \"YOUR_TOKEN\"}}}"
+        )
 
     tasks = [asyncio.create_task(adapter.start(handler)) for adapter in adapters]
     done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_EXCEPTION)

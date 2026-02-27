@@ -18,7 +18,18 @@ class TelegramInbound:
 
 
 class TelegramChannel:
+    """
+    Telegram channel with typing indicator, command menu, and reply support.
+    Uses long-polling (no webhook/public IP needed).
+    """
     name = "telegram"
+
+    # Bot commands registered with Telegram's command menu
+    BOT_COMMANDS = [
+        {"command": "start", "description": "Start the bot"},
+        {"command": "new",   "description": "Start a new conversation"},
+        {"command": "help",  "description": "Show available commands"},
+    ]
 
     def __init__(
         self,
@@ -35,14 +46,22 @@ class TelegramChannel:
         self.reply_to_message = reply_to_message
         self.timeout_seconds = timeout_seconds
         self._offset = 0
+        self._running = False
 
     async def start(self, handler: Callable[[str], Awaitable[str]]) -> None:
         if not self.token:
             raise RuntimeError("telegram token not configured")
 
+        self._running = True
         self._offset = await asyncio.to_thread(self._bootstrap_offset)
 
-        while True:
+        # Register command menu with BotFather
+        try:
+            await asyncio.to_thread(self._set_my_commands)
+        except Exception:
+            pass  # non-fatal
+
+        while self._running:
             try:
                 updates = await asyncio.to_thread(self._fetch_updates, self._offset)
             except Exception:
@@ -56,10 +75,74 @@ class TelegramChannel:
                 if self.allowed_chat_ids and msg.chat_id not in self.allowed_chat_ids:
                     continue
 
-                response = await handler(msg.text)
-                await asyncio.to_thread(self._send_message, msg.chat_id, response, msg.message_id)
+                # Handle slash commands
+                text = msg.text.strip()
+                if text.startswith("/"):
+                    cmd = text.split()[0].lower().lstrip("/").split("@")[0]
+                    if cmd == "start":
+                        await asyncio.to_thread(
+                            self._send_message,
+                            msg.chat_id,
+                            "👋 Hi! I'm *picoagent*, your AI assistant.\n\n"
+                            "Send me a message and I'll respond!\n"
+                            "Use /help to see available commands.",
+                            None,
+                        )
+                        continue
+                    elif cmd == "help":
+                        await asyncio.to_thread(
+                            self._send_message,
+                            msg.chat_id,
+                            "🤖 *picoagent commands:*\n"
+                            "/start — Start the bot\n"
+                            "/new — Start a new conversation\n"
+                            "/help — Show available commands",
+                            None,
+                        )
+                        continue
+                    elif cmd == "new":
+                        await asyncio.to_thread(
+                            self._send_message,
+                            msg.chat_id,
+                            "🔄 New conversation started. What can I help you with?",
+                            None,
+                        )
+                        continue
+                    # Unknown commands fall through to the agent
+
+                # Start typing indicator
+                typing_task = asyncio.create_task(
+                    self._typing_loop(msg.chat_id)
+                )
+
+                try:
+                    response = await handler(text)
+                finally:
+                    typing_task.cancel()
+                    try:
+                        await typing_task
+                    except asyncio.CancelledError:
+                        pass
+
+                reply_id = msg.message_id if self.reply_to_message else None
+                await asyncio.to_thread(self._send_message, msg.chat_id, response, reply_id)
 
             await asyncio.sleep(self.poll_seconds)
+
+    async def _typing_loop(self, chat_id: str) -> None:
+        """Repeatedly send 'typing' action until cancelled."""
+        try:
+            while True:
+                await asyncio.to_thread(self._send_chat_action, chat_id, "typing")
+                await asyncio.sleep(4)
+        except asyncio.CancelledError:
+            pass
+
+    def _send_chat_action(self, chat_id: str, action: str) -> None:
+        self._api_call("sendChatAction", {"chat_id": chat_id, "action": action})
+
+    def _set_my_commands(self) -> None:
+        self._api_call("setMyCommands", {"commands": self.BOT_COMMANDS})
 
     def _bootstrap_offset(self) -> int:
         updates = self._fetch_updates(offset=0, limit=100, timeout=0)
@@ -86,11 +169,21 @@ class TelegramChannel:
             payload: dict[str, Any] = {
                 "chat_id": chat_id,
                 "text": chunk,
+                "parse_mode": "Markdown",
                 "disable_web_page_preview": True,
             }
             if self.reply_to_message and reply_to_message_id is not None:
                 payload["reply_to_message_id"] = reply_to_message_id
-            self._api_call("sendMessage", payload)
+
+            try:
+                self._api_call("sendMessage", payload)
+            except RuntimeError:
+                # Fallback: send as plain text if Markdown parse fails
+                payload.pop("parse_mode", None)
+                try:
+                    self._api_call("sendMessage", payload)
+                except RuntimeError:
+                    pass
 
     def _api_call(self, method: str, payload: dict[str, Any]) -> dict[str, Any]:
         if not self.token:

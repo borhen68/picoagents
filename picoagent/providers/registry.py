@@ -99,11 +99,22 @@ class ProviderRegistry:
         return [self._specs[name] for name in sorted(self._specs)]
 
     def create_client(self, config: AgentConfig) -> ProviderClient:
-        chat_spec = self.get(config.provider)
-        chat_base_url = config.base_url or chat_spec.base_url
+        # Resolve the active chat provider name
+        active_provider = self._resolve_provider_name(config)
+        chat_spec = self.get(active_provider)
+
+        # Base URL: nested providers block → flat config.base_url → spec default
+        chat_base_url = (
+            (config.providers.get(active_provider) and config.providers.get(active_provider).base_url)  # type: ignore[union-attr]
+            or config.base_url
+            or chat_spec.base_url
+        )
         chat_model = config.chat_model or chat_spec.default_chat_model
         chat_embedding_model = config.embedding_model or chat_spec.default_embedding_model
-        chat_api_key = config.resolved_api_key() or os.getenv(chat_spec.api_key_env)
+
+        # API key: nested providers block → env-var from spec
+        chat_api_key = config.resolved_provider_key(active_provider) or os.getenv(chat_spec.api_key_env)
+
         chat_client = self._build_single_client(
             spec=chat_spec,
             base_url=chat_base_url,
@@ -112,19 +123,19 @@ class ProviderRegistry:
             api_key=chat_api_key,
         )
 
-        embedding_provider_name = (config.embedding_provider or config.provider).strip()
+        embedding_provider_name = (config.embedding_provider or active_provider).strip()
         embedding_spec = self.get(embedding_provider_name)
         embedding_base_url = (
             config.embedding_base_url
-            or (chat_base_url if embedding_provider_name == config.provider else embedding_spec.base_url)
+            or (chat_base_url if embedding_provider_name == active_provider else embedding_spec.base_url)
         )
         embedding_model = config.embedding_model or embedding_spec.default_embedding_model
         embedding_api_key = config.resolved_embedding_api_key()
         if not embedding_api_key:
-            if embedding_provider_name == config.provider:
+            if embedding_provider_name == active_provider:
                 embedding_api_key = chat_api_key
             else:
-                embedding_api_key = os.getenv(embedding_spec.api_key_env)
+                embedding_api_key = config.resolved_provider_key(embedding_provider_name) or os.getenv(embedding_spec.api_key_env)
         embedding_client = self._build_single_client(
             spec=embedding_spec,
             base_url=embedding_base_url,
@@ -134,12 +145,40 @@ class ProviderRegistry:
         )
 
         if (
-            embedding_provider_name == config.provider
+            embedding_provider_name == active_provider
             and embedding_base_url == chat_base_url
             and embedding_api_key == chat_api_key
         ):
             return chat_client
         return SplitProviderClient(chat_client=chat_client, embedding_client=embedding_client)
+
+    def _resolve_provider_name(self, config: AgentConfig) -> str:
+        """
+        Determine the active provider name from config.
+        If agents.provider is "auto", infer from the model name prefix (e.g. "openai/gpt-4o" → "openrouter").
+        Falls back to the first provider that has an api_key set.
+        """
+        declared = config.agents.provider
+        if declared and declared != "auto":
+            return declared
+
+        # Auto-detect: try to match model prefix to a known provider
+        model = config.chat_model or ""
+        prefix = model.split("/", 1)[0].lower() if "/" in model else ""
+
+        # Direct prefix match (e.g. model="groq/llama-3.3-70b-versatile")
+        for spec in self._specs.values():
+            if prefix == spec.name:
+                return spec.name
+
+        # Fallback: first provider with an api_key set in the providers block
+        for spec in self.list_specs():
+            pcfg = config.providers.get(spec.name)
+            if pcfg and pcfg.api_key:
+                return spec.name
+
+        # Ultimate fallback
+        return "openrouter"
 
     @staticmethod
     def _build_single_client(
