@@ -1,4 +1,5 @@
 <div align="center">
+  <img src="assets/logo.png" alt="picoagent logo" width="150" style="border-radius: 20%; margin-bottom: 20px;" />
   <h1>🌌 picoagent: Ultra-Lightweight & Mathematically Routed AI</h1>
   <p>
     <a href="https://github.com/borhen68/picoagents"><img src="https://img.shields.io/badge/github-repo-blue" alt="GitHub"></a>
