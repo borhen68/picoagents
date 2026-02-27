@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  agent:
+    build: .
+    image: picoagent:latest
+    container_name: picoagent-gateway
+    restart: unless-stopped
+    volumes:
+      # Mount the host's config directory to the container's standard config location
+      - ~/.picoagent:/root/.picoagent
+    environment:
+      # Pass through environment variables from the host if they exist
+      - PICOAGENT_API_KEY=${PICOAGENT_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN:-}
+      - SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN:-}
+      - WHATSAPP_ACCESS_TOKEN=${WHATSAPP_ACCESS_TOKEN:-}
+    # Command defaults to gateway mode via Dockerfile ENTRYPOINT
+    command: ["gateway", "--config", "/root/.picoagent/config.json"]
