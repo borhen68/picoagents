@@ -356,18 +356,19 @@ picoagent will periodically trigger `heartbeat.py`. The gateway wakes up and che
 
 ## 🐳 Docker Deployment
 
-You can deploy `picoagent` via Docker easily by mounting the config directory.
+You can deploy `picoagent` easily via Docker using the provided `docker-compose.yml`.
 
 ```bash
-# Initialize config (first time only)
-docker run -v ~/.picoagent:/root/.picoagent --rm picoagent onboard
+# 1. Edit your environment variables or config
+cp dev.config.json ~/.picoagent/config.json
 
-# Edit config on host to add API keys
-vim ~/.picoagent/config.json
+# 2. Start the gateway daemon in the background
+docker compose up -d
 
-# Run gateway (connects to enabled channels e.g. Telegram/Discord)
-docker run -v ~/.picoagent:/root/.picoagent picoagent gateway
+# 3. Check the logs
+docker compose logs -f
 ```
+Your configuration and memory files will be safely persisted in `~/.picoagent` on your host machine.
 
 ## 🐧 Linux Service
 
