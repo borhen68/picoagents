@@ -1,0 +1,155 @@
+Metadata-Version: 2.4
+Name: picoagent
+Version: 0.2.0
+Summary: A small async agent with vector memory and entropy-gated tool selection
+Author: picoagent contributors
+License: MIT
+Requires-Python: >=3.11
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: numpy>=1.26
+Requires-Dist: websockets>=12.0
+Provides-Extra: dev
+Requires-Dist: pytest>=8.0; extra == "dev"
+Dynamic: license-file
+
+# picoagent
+
+`picoagent` is a small Python agent runtime focused on two practical upgrades:
+
+- Vector memory with cosine-similarity top-k recall.
+- Entropy-gated tool selection to avoid low-confidence tool calls.
+
+## Install
+
+```bash
+pip install -e .
+```
+
+## Quick start
+
+```bash
+picoagent onboard
+picoagent agent
+```
+
+## Commands
+
+- `picoagent onboard`: Create `~/.picoagent/config.json`.
+- `picoagent agent`: Start interactive CLI chat.
+- `picoagent gateway`: Start configured channel adapters.
+- `picoagent providers`: List registered provider specs.
+- `picoagent tools`: List enabled tools.
+- `picoagent mcp`: Run a stdio MCP server exposing the tool registry.
+- `picoagent import-skills --source <dir>`: Import nanobot-style `SKILL.md` folders.
+
+## Groq + Embeddings
+
+Groq is chat/inference only. If you want Groq for chat and OpenAI for embeddings, set:
+
+```json
+{
+  "provider": "groq",
+  "chat_model": "llama-3.3-70b-versatile",
+  "embedding_provider": "openai",
+  "embedding_model": "text-embedding-3-small",
+  "embedding_api_key_env": "OPENAI_API_KEY"
+}
+```
+
+You can still keep your Groq key in `api_key` (or `GROQ_API_KEY` env).
+
+## Channels (v0.2)
+
+Supported gateway channels:
+
+- `cli`
+- `telegram` (Bot API polling)
+- `discord` (REST polling for a channel)
+- `slack`
+- `whatsapp`
+- `email`
+
+Example channel config (`~/.picoagent/config.json`):
+
+```json
+{
+  "enabled_channels": ["telegram", "discord", "slack", "email", "whatsapp"],
+  "channel_settings": {
+    "telegram": {
+      "allowed_chat_ids": ["123456789"],
+      "reply_to_message": true,
+      "poll_seconds": 3
+    },
+    "discord": {
+      "channel_id": "1234567890123456789",
+      "reply_as_reply": true,
+      "poll_seconds": 3
+    },
+    "slack": {
+      "channel_id": "C0123456789",
+      "poll_seconds": 3
+    },
+    "email": {
+      "username": "bot@example.com",
+      "password": "app-password",
+      "imap_host": "imap.example.com",
+      "smtp_host": "smtp.example.com",
+      "imap_port": 993,
+      "smtp_port": 587,
+      "use_tls": true
+    },
+    "whatsapp": {
+      "phone_number_id": "1234567890",
+      "inbox_path": "~/.picoagent/whatsapp_inbox.jsonl",
+      "outbox_path": "~/.picoagent/whatsapp_outbox.jsonl"
+    }
+  },
+  "channel_tokens": {
+    "telegram": "123456:ABC...",
+    "discord": "YOUR_DISCORD_BOT_TOKEN",
+    "slack": "xoxb-...",
+    "whatsapp": "EAAG..."
+  }
+}
+```
+
+WhatsApp note: this adapter polls a JSONL inbox file for incoming messages and can send replies through WhatsApp Cloud API when token + phone number ID are configured.
+
+## Skills and Gating
+
+- nanobot-style markdown skills (`skills/<name>/SKILL.md`) loaded at runtime.
+- Skills are selected by explicit mention (`$skill-name` / name match) and description keywords.
+- Subagent confidence gating for second-opinion review.
+- Adaptive entropy threshold tuner persisted in `~/.picoagent/threshold.json`.
+- Session persistence and safe consolidation offsets persisted in `~/.picoagent/sessions.json`.
+
+### Import nanobot skills
+
+```bash
+picoagent import-skills --source /path/to/nanobot/skills
+```
+
+## External MCP tools (client mode)
+
+Add MCP servers in config:
+
+```json
+{
+  "mcp_servers": [
+    {
+      "name": "tools",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "."],
+      "timeout_seconds": 30
+    }
+  ]
+}
+```
+
+At startup, picoagent fetches `tools/list` from each configured server and auto-registers wrappers named `mcp_<server>_<tool>`.
+MCP client sessions are persistent per configured server process and reused across calls.
+
+## License
+
+MIT

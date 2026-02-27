@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "picoagent"
+version = "0.2.0"
+description = "A small async agent with vector memory and entropy-gated tool selection"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Borheneddine Saidi", email = "borhen68@github.com" }]
+dependencies = [
+  "numpy>=1.26",
+  "websockets>=12.0"
+]
+urls = { Homepage = "https://github.com/borhen68/picoagents", Repository = "https://github.com/borhen68/picoagents.git" }
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+]
+
+[project.scripts]
+picoagent = "picoagent.cli:main"
+
+[tool.setuptools]
+packages = ["picoagent", "picoagent.core", "picoagent.agent", "picoagent.agent.tools", "picoagent.channels", "picoagent.providers", "picoagent.skills", "picoagent.session", "picoagent.templates"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+addopts = "-q"
