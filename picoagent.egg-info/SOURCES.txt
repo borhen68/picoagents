@@ -7,6 +7,7 @@ picoagent/cli.py
 picoagent/config.py
 picoagent/cron.py
 picoagent/heartbeat.py
+picoagent/hooks.py
 picoagent/mcp.py
 picoagent/mcp_client.py
 picoagent/session.py
@@ -36,6 +37,7 @@ picoagent/channels/telegram.py
 picoagent/channels/whatsapp.py
 picoagent/core/__init__.py
 picoagent/core/adaptive.py
+picoagent/core/dual_memory.py
 picoagent/core/memory.py
 picoagent/core/scheduler.py
 picoagent/providers/__init__.py
@@ -50,6 +52,8 @@ tests/test_agent_loop_fallback.py
 tests/test_config.py
 tests/test_context_prompt_cache.py
 tests/test_discord_channel.py
+tests/test_dual_memory.py
+tests/test_file_sandbox.py
 tests/test_markdown_skills.py
 tests/test_mcp.py
 tests/test_mcp_client.py
@@ -57,6 +61,7 @@ tests/test_memory.py
 tests/test_provider_registry_split.py
 tests/test_scheduler.py
 tests/test_session_manager.py
+tests/test_shell_sandbox.py
 tests/test_skills.py
 tests/test_telegram_channel.py
 tests/test_templates.py

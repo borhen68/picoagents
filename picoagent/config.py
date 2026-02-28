@@ -390,6 +390,7 @@ class AgentConfig:
     allow_web_search: bool = True
     allow_file_tool: bool = True
     shell_timeout_seconds: int = 20
+    tool_timeout_seconds: float = 30.0
     workspace_root: str = str(Path.cwd())
     templates_path: str = "templates"
     restrict_to_workspace: bool = True
@@ -516,6 +517,7 @@ class AgentConfig:
             "allow_web_search": self.allow_web_search,
             "allow_file_tool": self.allow_file_tool,
             "shell_timeout_seconds": self.shell_timeout_seconds,
+            "tool_timeout_seconds": self.tool_timeout_seconds,
             "workspace_root": self.workspace_root,
             "templates_path": self.templates_path,
             "restrict_to_workspace": self.restrict_to_workspace,

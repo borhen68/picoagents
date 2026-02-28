@@ -59,10 +59,6 @@ class DualMemoryStore:
         keep_count = memory_window // 2
         messages = session.messages
         
-        # We can just keep a simple metadata dict on the session manually if it doesn't exist
-        if not hasattr(session, "metadata"):
-            session.metadata = {}
-
         last_consolidated = session.metadata.get("dual_memory_consolidated", 0)
         
         if archive_all:

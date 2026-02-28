@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import re
 import traceback
 from dataclasses import dataclass, field
@@ -15,6 +16,7 @@ from picoagent.core.scheduler import EntropyScheduler, ToolDecision
 from picoagent.providers.registry import LocalHeuristicClient, ProviderClient, ProviderError
 from picoagent.session import SessionManager, SessionState
 from picoagent.skills import MarkdownSkillLibrary
+from picoagent import hooks
 
 
 @dataclass(slots=True)
@@ -69,6 +71,7 @@ class AgentLoop:
             pass
 
     async def run_turn(self, user_message: str, *, session_id: str | None = None) -> AgentTurnResult:
+        await hooks.fire("on_turn_start", message=user_message, session_id=session_id)
         tool_docs = self.tools.docs()
         session = self._get_session(session_id)
         if session is not None:
@@ -114,6 +117,7 @@ class AgentLoop:
             decision = ToolDecision(tool_name=None, entropy_bits=0.0, probabilities={}, should_clarify=True)
             text = f"Provider error while preparing turn: {exc}"
             self._finalize_session_turn(session, text)
+            await hooks.fire("on_turn_end", response=text, session_id=session_id)
             return AgentTurnResult(
                 text=text,
                 selected_tool=None,
@@ -127,6 +131,7 @@ class AgentLoop:
         if self._should_reply_directly(user_message):
             text = self._direct_chat_reply(user_message, memories=memories, history=history)
             self._finalize_session_turn(session, text)
+            await hooks.fire("on_turn_end", response=text, session_id=session_id)
             return AgentTurnResult(
                 text=text,
                 selected_tool=None,
@@ -157,6 +162,7 @@ class AgentLoop:
                 "Please clarify what action you want."
             )
             self._finalize_session_turn(session, text)
+            await hooks.fire("on_turn_end", response=text, session_id=session_id)
             return AgentTurnResult(
                 text=text,
                 selected_tool=None,
@@ -188,7 +194,30 @@ class AgentLoop:
             if validation_errors:
                 fallback_args = heuristic.plan_tool_args(user_message, tool_name, tool_doc)
                 if isinstance(fallback_args, dict):
-                    tool_args = fallback_args
+                    # Validate fallback args through schema before accepting them
+                    fallback_errors = validate_params(fallback_args, tool_schema)
+                    if fallback_errors:
+                        import logging as _logging
+                        _logging.getLogger(__name__).warning(
+                            "Heuristic fallback args for tool '%s' failed schema validation: %s",
+                            tool_name,
+                            "; ".join(fallback_errors),
+                        )
+                        # For non-shell tools, skip execution; for shell, let the repair logic below handle it
+                        if tool_name != "shell":
+                            text = self._direct_chat_reply(user_message, memories=memories, history=history)
+                            self._finalize_session_turn(session, text)
+                            await hooks.fire("on_turn_end", response=text, session_id=session_id)
+                            return AgentTurnResult(
+                                text=text,
+                                selected_tool=None,
+                                tool_args={},
+                                tool_output="",
+                                decision=decision,
+                                active_skills=active_skill_names,
+                            )
+                    else:
+                        tool_args = fallback_args
                 if tool_name == "shell":
                     command = str(tool_args.get("command", "")).strip() if isinstance(tool_args, dict) else ""
                     if not command and self._looks_like_shell_command(user_message):
@@ -199,6 +228,7 @@ class AgentLoop:
             if not command or not self._looks_like_shell_command(command):
                 text = self._direct_chat_reply(user_message, memories=memories, history=history)
                 self._finalize_session_turn(session, text)
+                await hooks.fire("on_turn_end", response=text, session_id=session_id)
                 return AgentTurnResult(
                     text=text,
                     selected_tool=None,
@@ -211,14 +241,78 @@ class AgentLoop:
 
         context = ToolContext(workspace_root=Path(self.config.workspace_root), session_id=session_id)
         result_success = False
+        max_tool_chain = 3
+        chain_depth = 0
 
         try:
-            result = await self.tools.run(tool_name, tool_args, context)
+            result = await asyncio.wait_for(
+                self.tools.run(tool_name, tool_args, context),
+                timeout=self.config.tool_timeout_seconds,
+            )
             tool_output = result.output
             result_success = result.success
+        except asyncio.TimeoutError:
+            from picoagent.agent.tools.registry import ToolResult
+            result = ToolResult(
+                output=f"Tool timed out after {self.config.tool_timeout_seconds}s",
+                success=False,
+            )
+            tool_output = result.output
+            result_success = False
         except Exception:  # noqa: BLE001
             tool_output = traceback.format_exc()
 
+        # Multi-turn tool chain: if tool succeeded, re-score with tool result appended
+        while result_success and chain_depth < max_tool_chain:
+            chain_depth += 1
+            chained_routing = routing_message + f"\n\nTool result: {tool_output}"
+            try:
+                chain_scores = self.provider.score_tools(chained_routing, tool_docs)
+            except ProviderError:
+                break
+            chain_decision = self.scheduler.decide(chain_scores, threshold_bits=threshold_bits)
+            if (
+                chain_decision.tool_name is None
+                or chain_decision.should_clarify
+                or chain_decision.entropy_bits >= threshold_bits
+            ):
+                break
+            # Check if top tool score is above 0.7
+            top_chain_score = float(chain_decision.probabilities.get(chain_decision.tool_name, 0.0))
+            if top_chain_score <= 0.7:
+                break
+            # Execute the chained tool
+            chained_tool_name = chain_decision.tool_name
+            chained_tool_doc = tool_docs.get(chained_tool_name, "")
+            try:
+                chained_args = self.provider.plan_tool_args(user_message, chained_tool_name, chained_tool_doc)
+            except ProviderError:
+                chained_args = heuristic.plan_tool_args(user_message, chained_tool_name, chained_tool_doc)
+            if not isinstance(chained_args, dict):
+                chained_args = {}
+            # Validate chained args before executing; break chain if invalid
+            try:
+                chained_schema = getattr(self.tools.get(chained_tool_name), "parameters", None)
+            except KeyError:
+                chained_schema = None
+            if isinstance(chained_schema, dict):
+                chained_errors = validate_params(chained_args, chained_schema)
+                if chained_errors:
+                    break
+            try:
+                chained_result = await asyncio.wait_for(
+                    self.tools.run(chained_tool_name, chained_args, context),
+                    timeout=self.config.tool_timeout_seconds,
+                )
+                tool_output = chained_result.output
+                result_success = chained_result.success
+                tool_name = chained_tool_name
+                tool_args = chained_args
+                decision = chain_decision
+            except (asyncio.TimeoutError, Exception):
+                break
+
+        await hooks.fire("on_tool_result", tool_name=tool_name, result=result, session_id=session_id)
         await self._remember_turn(user_message, tool_output, memory_type="tool", tag=tool_name)
 
         if self.adaptive_threshold is not None and self.config.adaptive_threshold_enabled:
@@ -238,6 +332,7 @@ class AgentLoop:
                 text = f"{text}\n\nSubagent review:\n{subagent_note}"
 
         self._finalize_session_turn(session, text)
+        await hooks.fire("on_turn_end", response=text, session_id=session_id)
         return AgentTurnResult(
             text=text,
             selected_tool=tool_name,

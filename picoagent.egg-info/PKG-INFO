@@ -2,94 +2,232 @@ Metadata-Version: 2.4
 Name: picoagent
 Version: 0.2.0
 Summary: A small async agent with vector memory and entropy-gated tool selection
-Author: picoagent contributors
+Author-email: Borheneddine Saidi <borhen68@github.com>
 License: MIT
+Project-URL: Homepage, https://github.com/borhen68/picoagents
+Project-URL: Repository, https://github.com/borhen68/picoagents.git
+Classifier: Programming Language :: Python :: 3
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
 Requires-Python: >=3.11
 Description-Content-Type: text/markdown
 License-File: LICENSE
 Requires-Dist: numpy>=1.26
 Requires-Dist: websockets>=12.0
+Requires-Dist: loguru>=0.7
 Provides-Extra: dev
 Requires-Dist: pytest>=8.0; extra == "dev"
 Dynamic: license-file
 
-# picoagent
+<div align="center">
+  <img src="assets/logo.png" alt="picoagent logo" width="150" style="border-radius: 20%; margin-bottom: 20px;" />
+  <h1>🌌 picoagent: Ultra-Lightweight & Mathematically Routed AI</h1>
+  <p>
+    <a href="https://github.com/borhen68/picoagents"><img src="https://img.shields.io/badge/github-repo-blue" alt="GitHub"></a>
+    <img src="https://img.shields.io/badge/python-≥3.11-blue" alt="Python">
+    <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
+  </p>
+</div>
 
-`picoagent` is a small Python agent runtime focused on two practical upgrades:
+🐈 **picoagent** is an **ultra-lightweight** personal AI assistant focused on mathematical tool-routing and safety.
 
-- Vector memory with cosine-similarity top-k recall.
-- Entropy-gated tool selection to avoid low-confidence tool calls.
+⚡️ Delivers advanced agent functionality (Vector embeddings, Sandboxing, Dual-Layer Memory) in just **~4,700** lines of code.
 
-## Install
+📏 Real-time line count: **4,749 lines**
+
+## 📢 News
+
+- **2026-02-27** 🛡️ **Workspace Sandboxing & Dual-Layer Memory:** Built-in `FileTool` and `ShellTool` are now safely sandboxed to your workspace. The LLM now continuously consolidates your long conversations into a searchable `HISTORY.md` and semantic `MEMORY.md` file in the background!
+- **2026-02-27** 🧮 **Entropy-Gating Engine:** Agent workflow now calculates Shannon Entropy and TF-IDF scores locally before executing tools to prevent hallucinations.
+- **2026-02-26** 🤖 **Template Support:** Full compatibility with nanobot-style Markdown templates (`SOUL.md`, `USER.md`).
+
+## Key Features of picoagent:
+
+� **Ultra-Lightweight**: Just ~4,700 lines of core agent code — easy to audit and modify.
+
+🔬 **Mathematically Routed**: Uses Shannon Entropy to gate tool execution. If the uncertainty is too high, the agent automatically asks you for clarification instead of guessing or causing harm.
+
+🧠 **Dual-Layer Memory**: Combines rapid Vector embeddings (Cosine-Similarity + Time Decay) with permanent, human-editable Markdown memory logs.
+
+⚡️ **Strict Safety Sandboxing**: Native Regex barriers prevent destructive shell commands, and file traversals are locked purely to the workspace root.
+
+💎 **Easy-to-Use**: One-click configuration and instant background daemon connections to 6+ messaging platforms.
+
+## 🏗️ Architecture Stack
+
+- **Core Routing:** `LocalHeuristicClient` + `EntropyScheduler`
+- **Memory Engine:** `VectorMemory` + `DualMemoryStore`
+- **Session Layer:** `SessionManager` + `AgentLoop` (Asyncio)
+
+## ✨ Use Cases
+
+<table align="center">
+  <tr align="center">
+    <th><p align="center">🛡️ Secure Local Automation</p></th>
+    <th><p align="center">🚀 Full-Stack Software Engineer</p></th>
+    <th><p align="center">📅 Smart Daily Routine Manager</p></th>
+    <th><p align="center">📚 Personal Knowledge Assistant</p></th>
+  </tr>
+  <tr>
+    <td align="center">Sandboxed • Monitored • Auditable</td>
+    <td align="center">Develop • Deploy • Scale</td>
+    <td align="center">Cron Jobs • Heartbeats • Automate</td>
+    <td align="center">Vector Recall • Decay • Reasoning</td>
+  </tr>
+</table>
+
+## 📦 Install
+
+**Install from source** (latest features, recommended for development)
 
 ```bash
+git clone https://github.com/borhen68/picoagents.git
+cd picoagents
 pip install -e .
 ```
 
-## Quick start
+## 🚀 Quick Start
+
+> [!TIP]
+> Set your API key in `~/.picoagent/config.json`.
+
+**1. Initialize**
 
 ```bash
 picoagent onboard
-picoagent agent
 ```
 
-## Commands
+**2. Configure (`~/.picoagent/config.json`)**
 
-- `picoagent onboard`: Create `~/.picoagent/config.json`.
-- `picoagent agent`: Start interactive CLI chat.
-- `picoagent gateway`: Start configured channel adapters.
-- `picoagent providers`: List registered provider specs.
-- `picoagent tools`: List enabled tools.
-- `picoagent mcp`: Run a stdio MCP server exposing the tool registry.
-- `picoagent import-skills --source <dir>`: Import nanobot-style `SKILL.md` folders.
-
-## Groq + Embeddings
-
-Groq is chat/inference only. If you want Groq for chat and OpenAI for embeddings, set:
-
+Add your preferred provider and API Keys (Example using Groq):
 ```json
 {
   "provider": "groq",
   "chat_model": "llama-3.3-70b-versatile",
-  "embedding_provider": "openai",
-  "embedding_model": "text-embedding-3-small",
-  "embedding_api_key_env": "OPENAI_API_KEY"
+  "api_key": "YOUR_GROQ_KEY"
 }
 ```
 
-You can still keep your Groq key in `api_key` (or `GROQ_API_KEY` env).
+**3. Chat**
 
-## Channels (v0.2)
+```bash
+picoagent agent
+```
 
-Supported gateway channels:
+That's it! You have a working AI assistant in 2 minutes.
 
-- `cli`
-- `telegram` (Bot API polling)
-- `discord` (REST polling for a channel)
-- `slack`
-- `whatsapp`
-- `email`
+## 💬 Chat Apps (Gateway)
 
-Example channel config (`~/.picoagent/config.json`):
+Connect picoagent to your favorite chat platform. It supports persistent sessions across all of them!
+
+| Channel | What you need |
+|---------|---------------|
+| **Telegram** | Bot token from @BotFather |
+| **Discord** | Bot token + Message Content intent |
+| **WhatsApp** | Inbox/Outbox config via Webhook bridge |
+| **Slack** | Bot token + Channel ID |
+| **Email** | IMAP/SMTP credentials |
+
+<details>
+<summary><b>Telegram</b> (Recommended)</summary>
+
+**1. Create a bot**
+- Open Telegram, search `@BotFather`
+- Send `/newbot`, follow prompts
+- Copy the token
+
+**2. Configure** (`~/.picoagent/config.json`)
 
 ```json
 {
-  "enabled_channels": ["telegram", "discord", "slack", "email", "whatsapp"],
+  "enabled_channels": ["telegram"],
+  "channel_tokens": {
+    "telegram": "YOUR_BOT_TOKEN"
+  },
   "channel_settings": {
     "telegram": {
-      "allowed_chat_ids": ["123456789"],
+      "allowed_chat_ids": ["YOUR_CHAT_ID"],
       "reply_to_message": true,
       "poll_seconds": 3
-    },
+    }
+  }
+}
+```
+
+**3. Run**
+
+```bash
+picoagent gateway
+```
+
+</details>
+
+<details>
+<summary><b>Discord</b></summary>
+
+**1. Configure** (`~/.picoagent/config.json`)
+
+```json
+{
+  "enabled_channels": ["discord"],
+  "channel_tokens": {
+    "discord": "YOUR_BOT_TOKEN"
+  },
+  "channel_settings": {
     "discord": {
-      "channel_id": "1234567890123456789",
+      "channel_id": "YOUR_CHANNEL_ID",
       "reply_as_reply": true,
       "poll_seconds": 3
-    },
+    }
+  }
+}
+```
+
+**2. Run**
+
+```bash
+picoagent gateway
+```
+
+</details>
+
+<details>
+<summary><b>Slack</b></summary>
+
+**1. Configure** (`~/.picoagent/config.json`)
+
+```json
+{
+  "enabled_channels": ["slack"],
+  "channel_tokens": {
+    "slack": "xoxb-YOUR_BOT_TOKEN"
+  },
+  "channel_settings": {
     "slack": {
-      "channel_id": "C0123456789",
+      "channel_id": "YOUR_CHANNEL_ID",
       "poll_seconds": 3
-    },
+    }
+  }
+}
+```
+
+**2. Run**
+
+```bash
+picoagent gateway
+```
+
+</details>
+
+<details>
+<summary><b>Email</b></summary>
+
+**1. Configure** (`~/.picoagent/config.json`)
+
+```json
+{
+  "enabled_channels": ["email"],
+  "channel_settings": {
     "email": {
       "username": "bot@example.com",
       "password": "app-password",
@@ -98,58 +236,224 @@ Example channel config (`~/.picoagent/config.json`):
       "imap_port": 993,
       "smtp_port": 587,
       "use_tls": true
-    },
-    "whatsapp": {
-      "phone_number_id": "1234567890",
-      "inbox_path": "~/.picoagent/whatsapp_inbox.jsonl",
-      "outbox_path": "~/.picoagent/whatsapp_outbox.jsonl"
     }
-  },
-  "channel_tokens": {
-    "telegram": "123456:ABC...",
-    "discord": "YOUR_DISCORD_BOT_TOKEN",
-    "slack": "xoxb-...",
-    "whatsapp": "EAAG..."
   }
 }
 ```
 
-WhatsApp note: this adapter polls a JSONL inbox file for incoming messages and can send replies through WhatsApp Cloud API when token + phone number ID are configured.
-
-## Skills and Gating
-
-- nanobot-style markdown skills (`skills/<name>/SKILL.md`) loaded at runtime.
-- Skills are selected by explicit mention (`$skill-name` / name match) and description keywords.
-- Subagent confidence gating for second-opinion review.
-- Adaptive entropy threshold tuner persisted in `~/.picoagent/threshold.json`.
-- Session persistence and safe consolidation offsets persisted in `~/.picoagent/sessions.json`.
-
-### Import nanobot skills
+**2. Run**
 
 ```bash
-picoagent import-skills --source /path/to/nanobot/skills
+picoagent gateway
 ```
 
-## External MCP tools (client mode)
+</details>
 
-Add MCP servers in config:
+## ⚙️ Configuration
+
+Config file: `~/.picoagent/config.json`
+
+### Providers
+
+picoagent separates out its fast embedding providers from its chat providers. This allows you to mix and match (e.g., fast Groq Chat with high-dimension OpenAI Embeddings).
+
+| Provider | Purpose | Get API Key |
+|----------|---------|-------------|
+| `custom` | Any OpenAI-compatible endpoint | — |
+| `openrouter` | LLM (recommended, access to all models) | [openrouter.ai](https://openrouter.ai) |
+| `anthropic` | LLM (Claude direct) | [console.anthropic.com](https://console.anthropic.com) |
+| `openai` | LLM + Embeddings (GPT direct) | [platform.openai.com](https://platform.openai.com) |
+| `deepseek` | LLM (DeepSeek direct) | [platform.deepseek.com](https://platform.deepseek.com) |
+| `groq` | LLM (Fastest LLM) | [console.groq.com](https://console.groq.com) |
+| `gemini` | LLM (Gemini direct) | [aistudio.google.com](https://aistudio.google.com) |
+| `vllm` | LLM (local, any OpenAI-compatible server) | — |
+
+<details>
+<summary><b>Custom Provider (Any OpenAI-compatible API)</b></summary>
+
+Connects directly to any OpenAI-compatible endpoint — LM Studio, llama.cpp, Together AI, Fireworks, Azure OpenAI, or any self-hosted server.
+
+Set your configuration like so:
+
+```json
+{
+  "provider": "custom",
+  "base_url": "https://api.your-provider.com/v1",
+  "chat_model": "your-model-name",
+  "api_key": "your-api-key"
+}
+```
+
+> For local servers that don't require a key, set `api_key` to any non-empty string (e.g. `"no-key"`).
+
+</details>
+
+<details>
+<summary><b>Adding a New Provider (Developer Guide)</b></summary>
+
+Unlike bloated frameworks that rely on large 3rd-party dependencies like `litellm`, picoagent manages its routing directly via a lightweight **Provider Registry** (`picoagent/providers/registry.py`) for maximum performance and security.
+
+Adding a new provider takes just 1 easy step.
+
+**Step 1.** Add a `ProviderSpec` entry to `_default_specs` in `picoagent/providers/registry.py`:
+
+```python
+ProviderSpec(
+    name="myprovider",                   # config field name
+    base_url="https://api.myprovider.com/v1", # endpoint
+    default_chat_model="my-chat-model",  # default model
+    default_embedding_model="my-embed-model", # fallback embeddings
+    api_key_env="MYPROVIDER_API_KEY",    # env var mapping
+)
+```
+
+That's it! picoagent will now treat `myprovider` as a native, globally accessible LLM option for all your agents.
+
+</details>
+
+### MCP (Model Context Protocol)
+
+> [!TIP]
+> The config format is universally compatible. You can copy MCP server configs directly from any MCP server's README.
+
+picoagent supports MCP natively—connect external tool servers and use them as native agent tools.
+
+Add MCP servers to your `config.json`:
 
 ```json
 {
   "mcp_servers": [
     {
-      "name": "tools",
+      "name": "filesystem",
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-filesystem", "."],
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/path/to/dir"],
       "timeout_seconds": 30
     }
   ]
 }
 ```
 
-At startup, picoagent fetches `tools/list` from each configured server and auto-registers wrappers named `mcp_<server>_<tool>`.
-MCP client sessions are persistent per configured server process and reused across calls.
+At startup, picoagent fetches `tools/list` from each configured server and auto-registers wrappers named `mcp_<server>_<tool>`. MCP client sessions are persistent per configured server process and reused across calls.
 
-## License
+### Security
+
+> [!TIP]
+> For production deployments, Workspace Sandboxing is **enabled by default** in picoagent.
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `allow_shell` | `true` | Toggles whether the agent can execute shell commands. |
+| `allow_file_tool` | `true` | Toggles whether the agent can modify disk files. |
+| `restrict_to_workspace` | `true`| Prevents path traversal out of the workspace root and blocks destructive command patterns. |
+| `shell_path_append` | `""` | Specifically allows isolated custom shell commands `/usr/sbin` without polluting the global environment. |
+
+## 🖥️ CLI Reference
+
+| Command | Description |
+|---------|-------------|
+| `picoagent onboard` | Create `~/.picoagent/config.json` |
+| `picoagent agent` | Start interactive CLI chat |
+| `picoagent gateway` | Start background gateway adapters (Telegram, Slack, etc.) |
+| `picoagent providers` | List registered provider schemas |
+| `picoagent tools` | List enabled tools |
+| `picoagent mcp` | Run a stdio MCP server outward, exposing the tool registry |
+| `picoagent import-skills --source <dir>` | Import nanobot-style `SKILL.md` folders to your workspace |
+
+Interactive mode exits: `exit`, `quit`, or `Ctrl+D`.
+
+<details>
+<summary><b>Scheduled Tasks (Cron)</b></summary>
+
+picoagent includes a built-in asynchronous cron manager! If your `cron.json` declares events, the daemon will wake up and execute tasks exactly at the scheduled POSIX intervals.
+
+</details>
+
+<details>
+<summary><b>Heartbeat (Periodic Tasks)</b></summary>
+
+picoagent will periodically trigger `heartbeat.py`. The gateway wakes up and checks `HEARTBEAT.md` in your workspace (`~/.picoagent/HEARTBEAT.md`). If the file has tasks, the agent executes them and delivers results to your most recently active chat channel!
+
+</details>
+
+## 🐳 Docker Deployment
+
+You can deploy `picoagent` easily via Docker using the provided `docker-compose.yml`.
+
+```bash
+# 1. Edit your environment variables or config
+cp dev.config.json ~/.picoagent/config.json
+
+# 2. Start the gateway daemon in the background
+docker compose up -d
+
+# 3. Check the logs
+docker compose logs -f
+```
+Your configuration and memory files will be safely persisted in `~/.picoagent` on your host machine.
+
+## 🐧 Linux Service
+
+Run the gateway as a systemd user service so it starts automatically and restarts on failure.
+
+**Create the service file** at `~/.config/systemd/user/picoagent-gateway.service`:
+
+```ini
+[Unit]
+Description=Picoagent Gateway
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/picoagent gateway
+Restart=always
+RestartSec=10
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=%h
+
+[Install]
+WantedBy=default.target
+```
+
+**Enable and start:**
+```bash
+systemctl --user daemon-reload
+systemctl --user enable --now picoagent-gateway
+```
+
+
+## 📁 Project Structure
+
+```
+picoagent/
+├── agent/            # 🧠 Core Agent Engine
+│   ├── loop.py       #    Agent execution Loop & Entropy Math
+│   ├── context.py    #    Dynamic System Prompt builder
+│   ├── subagents.py  #    Subagent task execution
+│   └── tools/        #    Built-in safe tools
+├── core/             # 🧮 Intelligence Math Layer
+│   ├── scheduler.py  #    Information Entropy routing
+│   ├── memory.py     #    Vector Embeddings (NumPy)
+│   ├── dual_memory.py#    LLM-powered semantic Markdown consolidation
+│   └── adaptive.py   #    Dynamic Confidence threshold sliding
+├── skills/           # 🎯 Markdown YAML capability loader
+├── channels/         # 📱 External chat gateway integrations
+├── providers/        # 🤖 LLM provider APIs
+├── config.py         # ⚙️ Configuration models
+├── mcp.py            # 🔌 Model Context Protocol Server
+├── heartbeat.py      # 💓 Proactive wake-ups
+├── cron.py           # ⏰ Standard POSIX interval executor
+└── cli.py            # 🖥️ Terminal Commands
+```
+
+## 🤝 Roadmap
+
+The codebase is engineered specifically for correctness and readability. 
+
+- [ ] **Better Adaptive Tuning** — Enhancing the dynamic mathematical thresholds during continuous sessions.
+- [ ] **Multi-modal Support** — Allow the agent to properly parse Images and Audio across channels.
+- [ ] **Expanded Workspace Restrictions** — More fine-grained Docker-level sandboxing inside the `ShellTool`.
+
+## 📄 License
 
 MIT

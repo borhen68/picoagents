@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
@@ -28,8 +30,11 @@ class Tool(Protocol):
 
 
 class ToolRegistry:
-    def __init__(self) -> None:
+    def __init__(self, cache_ttl: float = 60.0) -> None:
         self._tools: dict[str, Tool] = {}
+        self.cache_ttl = float(cache_ttl)
+        # Cache: key -> (ToolResult, timestamp)
+        self._cache: dict[tuple[str, str], tuple[ToolResult, float]] = {}
 
     def register(self, tool: Tool) -> None:
         self._tools[tool.name] = tool
@@ -48,6 +53,29 @@ class ToolRegistry:
     def docs(self) -> dict[str, str]:
         return {name: tool.description for name, tool in self._tools.items()}
 
+    def _get_cached(self, tool_name: str, args: dict[str, Any]) -> ToolResult | None:
+        """Return cached result if still within TTL, else None."""
+        try:
+            key = (tool_name, json.dumps(args, sort_keys=True))
+        except (TypeError, ValueError):
+            return None
+        entry = self._cache.get(key)
+        if entry is None:
+            return None
+        result, ts = entry
+        if time.time() - ts > self.cache_ttl:
+            del self._cache[key]
+            return None
+        return result
+
+    def _set_cached(self, tool_name: str, args: dict[str, Any], result: ToolResult) -> None:
+        """Store a successful result in the cache."""
+        try:
+            key = (tool_name, json.dumps(args, sort_keys=True))
+        except (TypeError, ValueError):
+            return
+        self._cache[key] = (result, time.time())
+
     async def run(self, name: str, args: dict[str, Any], context: ToolContext) -> ToolResult:
         tool = self.get(name)
         schema = getattr(tool, "parameters", None)
@@ -59,7 +87,16 @@ class ToolRegistry:
                     success=False,
                     metadata={"validation_errors": errors},
                 )
-        return await tool.run(args, context)
+        # Only use cache if the tool is cacheable (default True; set False to opt out)
+        tool_cacheable = getattr(tool, "cacheable", True)
+        if tool_cacheable:
+            cached = self._get_cached(name, args)
+            if cached is not None:
+                return cached
+        result = await tool.run(args, context)
+        if tool_cacheable and result.success:
+            self._set_cached(name, args, result)
+        return result
 
 
 _TYPE_MAP: dict[str, Any] = {

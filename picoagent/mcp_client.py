@@ -25,6 +25,7 @@ class MCPClientTool:
     tool_name: str
     description: str
     input_schema: dict[str, Any]
+    cacheable: bool = False  # MCP tools are stateful; disable TTL caching
 
     @property
     def name(self) -> str:

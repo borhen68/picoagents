@@ -3,8 +3,12 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import logging
 import os
 import shutil
+import signal
+import urllib.error
+import urllib.request
 from pathlib import Path
 from typing import Any
 
@@ -109,9 +113,26 @@ def build_agent_loop(config: AgentConfig) -> AgentLoop:
     return loop
 
 
+def _register_sighup_handler(skill_library: Any) -> None:
+    """Register SIGHUP handler for skill hot-reload (Unix only)."""
+    if not hasattr(signal, "SIGHUP"):
+        return
+
+    _logger = logging.getLogger(__name__)
+
+    def _on_sighup(signum: int, frame: Any) -> None:
+        if skill_library is not None:
+            count = skill_library.reload_if_changed()
+            _logger.info("SIGHUP received: reloaded %d skill(s)", count)
+
+    signal.signal(signal.SIGHUP, _on_sighup)
+
+
 async def run_cli_agent(config: AgentConfig) -> None:
     loop = build_agent_loop(config)
     channel = CLIChannel()
+
+    _register_sighup_handler(loop.skill_library)
 
     async def handler(user_message: str) -> str:
         turn = await loop.run_turn(user_message, session_id="cli")
@@ -122,6 +143,8 @@ async def run_cli_agent(config: AgentConfig) -> None:
 
 async def run_gateway(config: AgentConfig) -> None:
     loop = build_agent_loop(config)
+
+    _register_sighup_handler(loop.skill_library)
 
     async def handler(user_message: str) -> str:
         turn = await loop.run_turn(user_message)
@@ -359,6 +382,42 @@ def cmd_import_skills(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_install_skill(args: argparse.Namespace) -> int:
+    repo = args.repo.strip()
+    if "/" not in repo:
+        print(f"Error: repo must be in 'user/repo' format, got: {repo!r}")
+        return 1
+
+    skill_name = repo.split("/")[-1]
+    skill_content: str | None = None
+
+    for branch in ("main", "master"):
+        url = f"https://raw.githubusercontent.com/{repo}/{branch}/SKILL.md"
+        try:
+            with urllib.request.urlopen(url, timeout=15) as resp:
+                skill_content = resp.read().decode("utf-8")
+            break
+        except urllib.error.HTTPError as exc:
+            if exc.code == 404:
+                continue
+            print(f"Error fetching {url}: HTTP {exc.code}")
+            return 1
+        except Exception as exc:
+            print(f"Error fetching {url}: {exc}")
+            return 1
+
+    if skill_content is None:
+        print(f"Error: SKILL.md not found in {repo} (tried main and master branches)")
+        return 1
+
+    target_dir = Path.cwd() / "skills" / skill_name
+    target_dir.mkdir(parents=True, exist_ok=True)
+    skill_file = target_dir / "SKILL.md"
+    skill_file.write_text(skill_content, encoding="utf-8")
+    print(f"Installed skill '{skill_name}' to {skill_file}")
+    return 0
+
+
 def _as_str(value: Any) -> str | None:
     if value is None:
         return None
@@ -456,6 +515,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="Directory containing skill folders (each folder has SKILL.md)",
     )
     p_import_skills.set_defaults(func=cmd_import_skills)
+
+    p_install_skill = onboard.add_parser("install-skill", help="Install a skill from GitHub (user/repo)")
+    p_install_skill.add_argument("repo", help="GitHub repo in 'user/repo' format")
+    p_install_skill.set_defaults(func=cmd_install_skill)
 
     return parser
 

@@ -21,11 +21,14 @@ class MemoryRecord:
 class VectorMemory:
     """Cosine-ranked memory with exponential time decay."""
 
-    def __init__(self, decay_lambda: float = 0.05, persistence_path: str | Path | None = None) -> None:
+    def __init__(self, decay_lambda: float = 0.05, persistence_path: str | Path | None = None, max_memories: int = 10000) -> None:
         if decay_lambda < 0:
             raise ValueError("decay_lambda must be >= 0")
+        if max_memories <= 0:
+            raise ValueError("max_memories must be > 0")
         self.decay_lambda = float(decay_lambda)
         self.persistence_path = Path(persistence_path).expanduser() if persistence_path else None
+        self.max_memories = int(max_memories)
         self._records: list[MemoryRecord] = []
         self._dimension: int | None = None
 
@@ -56,6 +59,17 @@ class VectorMemory:
                 metadata=dict(metadata or {}),
             )
         )
+        self._evict_if_needed()
+
+    def _evict_if_needed(self) -> None:
+        """Evict oldest 10% of records when max_memories is exceeded."""
+        if len(self._records) <= self.max_memories:
+            return
+        evict_count = max(1, self.max_memories // 10)
+        # Sort by created_at ascending (oldest first), evict the oldest evict_count
+        sorted_indices = sorted(range(len(self._records)), key=lambda i: self._records[i].created_at)
+        indices_to_remove = set(sorted_indices[:evict_count])
+        self._records = [r for i, r in enumerate(self._records) if i not in indices_to_remove]
 
     def recall(self, query_embedding: np.ndarray, k: int = 5) -> list[str]:
         ranked = self.recall_with_scores(query_embedding, k=k)

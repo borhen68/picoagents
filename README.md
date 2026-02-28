@@ -10,17 +10,35 @@
 
 🐈 **picoagent** is an **ultra-lightweight** personal AI assistant focused on mathematical tool-routing and safety.
 
-⚡️ Delivers advanced agent functionality (Vector embeddings, Sandboxing, Dual-Layer Memory) in just **~4,700** lines of code.
+⚡️ Delivers advanced agent functionality (Vector embeddings, Sandboxing, Dual-Layer Memory, Tool Chains, Plugin Hooks) in just **~5,750** lines of code.
 
-📏 Real-time line count: **4,749 lines**
+📏 Real-time line count: **5,756 lines**
 
 ## 📢 News
 
+- **2026-02-28** 🔗 **Multi-Turn Tool Chains:** Agent can now chain up to 3 tool executions automatically without requiring new user messages. Each tool result is fed back into entropy scoring for the next tool.
+- **2026-02-28** ⏱️ **Tool Timeout Protection:** Every tool execution is now wrapped with a 30-second timeout (configurable). Prevents hanging tools from blocking the agent forever.
+- **2026-02-28** 🗃️ **Tool Result Caching:** Successful tool results are cached for 60 seconds, avoiding redundant API calls for repeated queries.
+- **2026-02-28** 🪝 **Plugin Hook System:** New `picoagent/hooks.py` module exposes `on_turn_start`, `on_tool_result`, and `on_turn_end` events for extensibility.
+- **2026-02-28** 📥 **Skill Install Command:** New `picoagent install-skill <user/repo>` command installs skills directly from GitHub.
+- **2026-02-28** 🔄 **Skill Hot-Reload:** Skills can now be reloaded on-the-fly by sending SIGHUP to the running agent.
+- **2026-02-28** 📊 **Skill Usage Telemetry:** Tracks which skills are used and how often in `~/.picoagent/skill_usage.jsonl`.
+- **2026-02-28** 🧩 **Skill Dependencies:** Skills can now declare `requires: [other-skill]` to auto-load dependencies.
 - **2026-02-27** 🛡️ **Workspace Sandboxing & Dual-Layer Memory:** Built-in `FileTool` and `ShellTool` are now safely sandboxed to your workspace. The LLM now continuously consolidates your long conversations into a searchable `HISTORY.md` and semantic `MEMORY.md` file in the background!
 - **2026-02-27** 🧮 **Entropy-Gating Engine:** Agent workflow now calculates Shannon Entropy and TF-IDF scores locally before executing tools to prevent hallucinations.
 - **2026-02-26** 🤖 **Template Support:** Full compatibility with nanobot-style Markdown templates (`SOUL.md`, `USER.md`).
 
 ## Key Features of picoagent:
+
+🎯 **Multi-Turn Tool Chains**: The agent can automatically execute up to 3 tool calls in sequence, feeding each result back into entropy scoring for the next decision.
+
+⏱️ **Tool Timeout Protection**: Every tool execution has a configurable timeout (default 30s) to prevent hanging.
+
+🗃️ **Tool Result Caching**: Successful tool results are cached for 60 seconds to avoid redundant API calls.
+
+🪝 **Plugin Hook System**: Extend picoagent with custom plugins via `on_turn_start`, `on_tool_result`, and `on_turn_end` hooks.
+
+💎 **Skill Install from GitHub**: Install skills directly with `picoagent install-skill user/repo` — no manual download needed.
 
 � **Ultra-Lightweight**: Just ~4,700 lines of core agent code — easy to audit and modify.
 
@@ -328,8 +346,6 @@ At startup, picoagent fetches `tools/list` from each configured server and auto-
 
 ## 🖥️ CLI Reference
 
-| Command | Description |
-|---------|-------------|
 | `picoagent onboard` | Create `~/.picoagent/config.json` |
 | `picoagent agent` | Start interactive CLI chat |
 | `picoagent gateway` | Start background gateway adapters (Telegram, Slack, etc.) |
@@ -337,6 +353,7 @@ At startup, picoagent fetches `tools/list` from each configured server and auto-
 | `picoagent tools` | List enabled tools |
 | `picoagent mcp` | Run a stdio MCP server outward, exposing the tool registry |
 | `picoagent import-skills --source <dir>` | Import nanobot-style `SKILL.md` folders to your workspace |
+| `picoagent install-skill <user/repo>` | Install a skill directly from GitHub |
 
 Interactive mode exits: `exit`, `quit`, or `Ctrl+D`.
 
@@ -429,6 +446,14 @@ picoagent/
 
 The codebase is engineered specifically for correctness and readability. 
 
+- [x] **Multi-Turn Tool Chains** — Agent can chain up to 3 tools automatically.
+- [x] **Tool Timeout Protection** — Prevents hanging tools from blocking the agent.
+- [x] **Tool Result Caching** — 60-second TTL cache for repeated queries.
+- [x] **Plugin Hook System** — Extensible via `on_turn_start`, `on_tool_result`, `on_turn_end`.
+- [x] **Skill Install Command** — Install skills from GitHub with one command.
+- [x] **Skill Hot-Reload** — Reload skills without restarting via SIGHUP.
+- [x] **Skill Usage Telemetry** — Track which skills are used and how often.
+- [x] **Skill Dependencies** — Skills can declare `requires:` for auto-loading.
 - [ ] **Better Adaptive Tuning** — Enhancing the dynamic mathematical thresholds during continuous sessions.
 - [ ] **Multi-modal Support** — Allow the agent to properly parse Images and Audio across channels.
 - [ ] **Expanded Workspace Restrictions** — More fine-grained Docker-level sandboxing inside the `ShellTool`.
