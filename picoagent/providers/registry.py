@@ -39,6 +39,9 @@ class ProviderClient(Protocol):
     def chat(self, user_prompt: str, *, system_prompt: str | None = None) -> str:
         ...
 
+    def get_default_model(self) -> str:
+        ...
+
 
 @dataclass(slots=True)
 class ProviderSpec:
@@ -57,6 +60,9 @@ class SplitProviderClient:
     def __init__(self, *, chat_client: ProviderClient, embedding_client: ProviderClient) -> None:
         self._chat = chat_client
         self._embed = embedding_client
+
+    def get_default_model(self) -> str:
+        return self._chat.get_default_model()
 
     def embed(self, text: str) -> np.ndarray:
         return self._embed.embed(text)
@@ -288,6 +294,9 @@ class OpenAICompatibleClient:
         self.timeout_seconds = timeout_seconds
         self._fallback = LocalHeuristicClient()
 
+    def get_default_model(self) -> str:
+        return self.chat_model
+
     def embed(self, text: str) -> np.ndarray:
         payload = {"model": self.embedding_model, "input": text}
         data = self._request("/embeddings", payload)
@@ -400,6 +409,9 @@ class AnthropicClient:
         self.timeout_seconds = timeout_seconds
         self._fallback = LocalHeuristicClient()
 
+    def get_default_model(self) -> str:
+        return self.chat_model
+
     def embed(self, text: str) -> np.ndarray:
         return self._fallback.embed(text)
 
@@ -496,6 +508,9 @@ class LocalHeuristicClient:
 
     _dim = 256
 
+    def get_default_model(self) -> str:
+        return "local-heuristic"
+
     def embed(self, text: str) -> np.ndarray:
         vec = np.zeros(self._dim, dtype=np.float32)
         for token in re.findall(r"[a-zA-Z0-9_]+", text.lower()):
@@ -514,11 +529,33 @@ class LocalHeuristicClient:
 
         for name in tool_docs:
             lname = name.lower()
-            if "search" in lname and any(k in text for k in ("search", "find", "web", "lookup", "google")):
+            if "search" in lname and any(
+                k in text
+                for k in (
+                    "search",
+                    "find",
+                    "web",
+                    "lookup",
+                    "google",
+                    "internet",
+                    "current",
+                    "today",
+                    "latest",
+                    "price",
+                    "quote",
+                    "market",
+                    "stock",
+                    "crypto",
+                    "bitcoin",
+                    "btc",
+                )
+            ):
                 scores[name] += 1.5
             if "file" in lname and any(k in text for k in ("file", "read", "write", "folder", "path", ".py", ".md")):
                 scores[name] += 1.5
             if "shell" in lname and any(k in text for k in ("run", "command", "terminal", "ls", "cat", "grep")):
+                scores[name] += 1.5
+            if "cron" in lname and any(k in text for k in ("remind", "every", "timer", "schedule", "recurring", "loop", "repeat", "interval")):
                 scores[name] += 1.5
 
         if not any(scores.values()):
@@ -544,6 +581,29 @@ class LocalHeuristicClient:
             if write_match:
                 return {"action": "write", "path": write_match.group(1), "content": write_match.group(2)}
             return {"action": "read", "path": text}
+
+        if "cron" in name:
+            # Parse "remind me to X every Y minutes/hours"
+            every_seconds = 1800  # default 30 minutes
+            # Try to extract interval
+            interval_match = re.search(r"every (\d+) ?(minute|min|hour|sec|second)s?", text, re.IGNORECASE)
+            if interval_match:
+                amount = int(interval_match.group(1))
+                unit = interval_match.group(2).lower()
+                if unit.startswith("min"):
+                    every_seconds = amount * 60
+                elif unit.startswith("hour"):
+                    every_seconds = amount * 3600
+                elif unit.startswith("sec") or unit.startswith("second"):
+                    every_seconds = amount
+            # Try to extract the reminder message
+            message_match = re.search(r"(?:remind me to|to) (.+?) every", text, re.IGNORECASE)
+            if message_match:
+                reminder_message = message_match.group(1).strip()
+            else:
+                # Fallback: use the whole message
+                reminder_message = text
+            return {"action": "add", "message": reminder_message, "every_seconds": every_seconds}
 
         return {"query": text}
 

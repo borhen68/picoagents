@@ -35,6 +35,7 @@ class EmailChannel:
         poll_seconds: float = 15.0,
         use_tls: bool = True,
         use_ssl: bool = False,
+        allow_from: set[str] | None = None,
     ) -> None:
         self.username = username
         self.password = password
@@ -47,6 +48,7 @@ class EmailChannel:
         self.poll_seconds = poll_seconds
         self.use_tls = use_tls
         self.use_ssl = use_ssl
+        self.allow_from = allow_from
 
     async def start(self, handler: Callable[[str], Awaitable[str]]) -> None:
         if not self.username or not self.password:
@@ -63,6 +65,8 @@ class EmailChannel:
 
             for msg in inbound:
                 if not msg.body.strip():
+                    continue
+                if self.allow_from and msg.sender not in self.allow_from:
                     continue
                 response = await handler(msg.body)
                 await asyncio.to_thread(self._send_reply, msg.sender, msg.subject, response)

@@ -41,6 +41,14 @@ class ShellTool:
             r">\s*/dev/sd",                  # write to disk
             r"\b(shutdown|reboot|poweroff)\b",  # system power
             r":\(\)\s*\{.*\};\s*:",          # fork bomb
+            r"\|\s*(ba)?sh\b",               # pipe to shell (curl|bash, wget|sh)
+            r"\|\s*zsh\b",                   # pipe to zsh
+            r"\bsudo\b",                     # privilege escalation
+            r"\bsu\s+-?\s",                  # switch user
+            r"\beval\b",                     # eval command injection
+            r"\bchmod\s+777\b",              # overly permissive permissions
+            r">\s*/etc/",                    # writing to system config
+            r"\bnc\s+-[el]",                 # netcat listeners (reverse shells)
         ]
 
     async def run(self, args: dict[str, Any], context: ToolContext) -> ToolResult:

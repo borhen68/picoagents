@@ -10,6 +10,7 @@ picoagent/heartbeat.py
 picoagent/hooks.py
 picoagent/mcp.py
 picoagent/mcp_client.py
+picoagent/py.typed
 picoagent/session.py
 picoagent/templates.py
 picoagent.egg-info/PKG-INFO
@@ -23,6 +24,7 @@ picoagent/agent/context.py
 picoagent/agent/loop.py
 picoagent/agent/subagents.py
 picoagent/agent/tools/__init__.py
+picoagent/agent/tools/cron.py
 picoagent/agent/tools/file.py
 picoagent/agent/tools/registry.py
 picoagent/agent/tools/search.py
@@ -34,6 +36,7 @@ picoagent/channels/discord_.py
 picoagent/channels/email.py
 picoagent/channels/slack.py
 picoagent/channels/telegram.py
+picoagent/channels/utils.py
 picoagent/channels/whatsapp.py
 picoagent/core/__init__.py
 picoagent/core/adaptive.py
@@ -53,16 +56,21 @@ tests/test_config.py
 tests/test_context_prompt_cache.py
 tests/test_discord_channel.py
 tests/test_dual_memory.py
+tests/test_email_channel.py
 tests/test_file_sandbox.py
 tests/test_markdown_skills.py
 tests/test_mcp.py
 tests/test_mcp_client.py
 tests/test_memory.py
+tests/test_provider_get_default_model.py
 tests/test_provider_registry_split.py
 tests/test_scheduler.py
 tests/test_session_manager.py
+tests/test_shell_deny_patterns.py
 tests/test_shell_sandbox.py
 tests/test_skills.py
+tests/test_slack_channel.py
+tests/test_split_message_shared.py
 tests/test_telegram_channel.py
 tests/test_templates.py
 tests/test_tool_validation.py

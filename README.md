@@ -1,6 +1,6 @@
 <div align="center">
   <img src="assets/logo.png" alt="picoagent logo" width="150" style="border-radius: 20%; margin-bottom: 20px;" />
-  <h1>🌌 picoagent: Ultra-Lightweight & Mathematically Routed AI</h1>
+  <h1>picoagent: Ultra-Lightweight & Mathematically Routed AI</h1>
   <p>
     <a href="https://github.com/borhen68/picoagents"><img src="https://img.shields.io/badge/github-repo-blue" alt="GitHub"></a>
     <img src="https://img.shields.io/badge/python-≥3.11-blue" alt="Python">
@@ -8,62 +8,61 @@
   </p>
 </div>
 
-🐈 **picoagent** is an **ultra-lightweight** personal AI assistant focused on mathematical tool-routing and safety.
+**picoagent** is an ultra-lightweight personal AI assistant focused on mathematical tool-routing and safety.
 
-⚡️ Delivers advanced agent functionality (Vector embeddings, Sandboxing, Dual-Layer Memory, Tool Chains, Plugin Hooks) in just **~5,750** lines of code.
+It delivers advanced agent functionality (vector memory, sandboxing, dual-layer memory, tool chains, plugin hooks) in a compact codebase.
 
-📏 Real-time line count: **5,756 lines**
+## News
 
-## 📢 News
+- **2026-03-01** **Market Query Improvements:** Crypto price queries such as "BTC price today" now resolve through a dedicated CoinGecko lookup path in `search`.
+- **2026-03-01** **Cron Reliability Fixes:** Gateway cron execution now respects configured `cron_file`, and cron args are normalized (`everyseconds`, `prompt`, etc.).
+- **2026-03-01** **Memory Response Hardening:** "Where is memory stored?" style questions return deterministic local file paths and memory preview snippets.
+- **2026-02-28**  **Multi-Turn Tool Chains:** Agent can now chain up to 3 tool executions automatically without requiring new user messages. Each tool result is fed back into entropy scoring for the next tool.
+- **2026-02-28**  **Tool Timeout Protection:** Every tool execution is now wrapped with a 30-second timeout (configurable). Prevents hanging tools from blocking the agent forever.
+- **2026-02-28**  **Tool Result Caching:** Successful tool results are cached for 60 seconds, avoiding redundant API calls for repeated queries.
+- **2026-02-28**  **Plugin Hook System:** New `picoagent/hooks.py` module exposes `on_turn_start`, `on_tool_result`, and `on_turn_end` events for extensibility.
+- **2026-02-28**  **Skill Install Command:** New `picoagent install-skill <user/repo>` command installs skills directly from GitHub.
+- **2026-02-28**  **Skill Hot-Reload:** Skills can now be reloaded on-the-fly by sending SIGHUP to the running agent.
+- **2026-02-28**  **Skill Usage Telemetry:** Tracks which skills are used and how often in `~/.picoagent/skill_usage.jsonl`.
+- **2026-02-28**  **Skill Dependencies:** Skills can now declare `requires: [other-skill]` to auto-load dependencies.
+- **2026-02-27**  **Workspace Sandboxing & Dual-Layer Memory:** Built-in `FileTool` and `ShellTool` are now safely sandboxed to your workspace. The LLM now continuously consolidates your long conversations into a searchable `HISTORY.md` and semantic `MEMORY.md` file in the background!
+- **2026-02-27**  **Entropy-Gating Engine:** Agent workflow now calculates Shannon Entropy and TF-IDF scores locally before executing tools to prevent hallucinations.
+- **2026-02-26**  **Template Support:** Full compatibility with nanobot-style Markdown templates (`SOUL.md`, `USER.md`).
 
-- **2026-02-28** 🔗 **Multi-Turn Tool Chains:** Agent can now chain up to 3 tool executions automatically without requiring new user messages. Each tool result is fed back into entropy scoring for the next tool.
-- **2026-02-28** ⏱️ **Tool Timeout Protection:** Every tool execution is now wrapped with a 30-second timeout (configurable). Prevents hanging tools from blocking the agent forever.
-- **2026-02-28** 🗃️ **Tool Result Caching:** Successful tool results are cached for 60 seconds, avoiding redundant API calls for repeated queries.
-- **2026-02-28** 🪝 **Plugin Hook System:** New `picoagent/hooks.py` module exposes `on_turn_start`, `on_tool_result`, and `on_turn_end` events for extensibility.
-- **2026-02-28** 📥 **Skill Install Command:** New `picoagent install-skill <user/repo>` command installs skills directly from GitHub.
-- **2026-02-28** 🔄 **Skill Hot-Reload:** Skills can now be reloaded on-the-fly by sending SIGHUP to the running agent.
-- **2026-02-28** 📊 **Skill Usage Telemetry:** Tracks which skills are used and how often in `~/.picoagent/skill_usage.jsonl`.
-- **2026-02-28** 🧩 **Skill Dependencies:** Skills can now declare `requires: [other-skill]` to auto-load dependencies.
-- **2026-02-27** 🛡️ **Workspace Sandboxing & Dual-Layer Memory:** Built-in `FileTool` and `ShellTool` are now safely sandboxed to your workspace. The LLM now continuously consolidates your long conversations into a searchable `HISTORY.md` and semantic `MEMORY.md` file in the background!
-- **2026-02-27** 🧮 **Entropy-Gating Engine:** Agent workflow now calculates Shannon Entropy and TF-IDF scores locally before executing tools to prevent hallucinations.
-- **2026-02-26** 🤖 **Template Support:** Full compatibility with nanobot-style Markdown templates (`SOUL.md`, `USER.md`).
+## Key Features
 
-## Key Features of picoagent:
+**Multi-Turn Tool Chains**: The agent can automatically execute up to 3 tool calls in sequence, feeding each result back into entropy scoring for the next decision.
 
-🎯 **Multi-Turn Tool Chains**: The agent can automatically execute up to 3 tool calls in sequence, feeding each result back into entropy scoring for the next decision.
+**Tool Timeout Protection**: Every tool execution has a configurable timeout (default 30s) to prevent hanging.
 
-⏱️ **Tool Timeout Protection**: Every tool execution has a configurable timeout (default 30s) to prevent hanging.
+**Tool Result Caching**: Successful tool results are cached for 60 seconds to avoid redundant API calls.
 
-🗃️ **Tool Result Caching**: Successful tool results are cached for 60 seconds to avoid redundant API calls.
+**Plugin Hook System**: Extend picoagent with custom plugins via `on_turn_start`, `on_tool_result`, and `on_turn_end` hooks.
 
-🪝 **Plugin Hook System**: Extend picoagent with custom plugins via `on_turn_start`, `on_tool_result`, and `on_turn_end` hooks.
+**Skill Install from GitHub**: Install skills directly with `picoagent install-skill user/repo` without manual downloads.
 
-💎 **Skill Install from GitHub**: Install skills directly with `picoagent install-skill user/repo` — no manual download needed.
+**Dual-Layer Memory**: Combines vector recall with durable markdown memory files (`MEMORY.md` and `HISTORY.md`).
 
-� **Ultra-Lightweight**: Just ~4,700 lines of core agent code — easy to audit and modify.
+**Mathematically Routed**: Uses Shannon Entropy to gate tool execution. If uncertainty is high, the agent asks for clarification instead of guessing.
 
-🔬 **Mathematically Routed**: Uses Shannon Entropy to gate tool execution. If the uncertainty is too high, the agent automatically asks you for clarification instead of guessing or causing harm.
+**Strict Safety Sandboxing**: Regex barriers block destructive shell commands, and file traversal is locked to the workspace root.
 
-🧠 **Dual-Layer Memory**: Combines rapid Vector embeddings (Cosine-Similarity + Time Decay) with permanent, human-editable Markdown memory logs.
+**Maintenance Commands**: Includes `doctor`, `prune-memory`, and `threshold-stats` CLI commands for runtime diagnostics.
 
-⚡️ **Strict Safety Sandboxing**: Native Regex barriers prevent destructive shell commands, and file traversals are locked purely to the workspace root.
-
-💎 **Easy-to-Use**: One-click configuration and instant background daemon connections to 6+ messaging platforms.
-
-## 🏗️ Architecture Stack
+## Architecture Stack
 
 - **Core Routing:** `LocalHeuristicClient` + `EntropyScheduler`
 - **Memory Engine:** `VectorMemory` + `DualMemoryStore`
 - **Session Layer:** `SessionManager` + `AgentLoop` (Asyncio)
 
-## ✨ Use Cases
+## Use Cases
 
 <table align="center">
   <tr align="center">
-    <th><p align="center">🛡️ Secure Local Automation</p></th>
-    <th><p align="center">🚀 Full-Stack Software Engineer</p></th>
-    <th><p align="center">📅 Smart Daily Routine Manager</p></th>
-    <th><p align="center">📚 Personal Knowledge Assistant</p></th>
+    <th><p align="center">Secure Local Automation</p></th>
+    <th><p align="center">Full-Stack Software Engineer</p></th>
+    <th><p align="center">Smart Daily Routine Manager</p></th>
+    <th><p align="center">Personal Knowledge Assistant</p></th>
   </tr>
   <tr>
     <td align="center">Sandboxed • Monitored • Auditable</td>
@@ -73,7 +72,7 @@
   </tr>
 </table>
 
-## 📦 Install
+## Install
 
 **Install from source** (latest features, recommended for development)
 
@@ -83,7 +82,7 @@ cd picoagents
 pip install -e .
 ```
 
-## 🚀 Quick Start
+## Quick Start
 
 > [!TIP]
 > Set your API key in `~/.picoagent/config.json`.
@@ -96,12 +95,18 @@ picoagent onboard
 
 **2. Configure (`~/.picoagent/config.json`)**
 
-Add your preferred provider and API Keys (Example using Groq):
+Add your preferred provider and API keys (example using Groq):
 ```json
 {
-  "provider": "groq",
-  "chat_model": "llama-3.3-70b-versatile",
-  "api_key": "YOUR_GROQ_KEY"
+  "providers": {
+    "groq": {
+      "apiKey": "YOUR_GROQ_KEY"
+    }
+  },
+  "agents": {
+    "provider": "groq",
+    "model": "llama-3.3-70b-versatile"
+  }
 }
 ```
 
@@ -113,7 +118,7 @@ picoagent agent
 
 That's it! You have a working AI assistant in 2 minutes.
 
-## 💬 Chat Apps (Gateway)
+## Chat Apps (Gateway)
 
 Connect picoagent to your favorite chat platform. It supports persistent sessions across all of them!
 
@@ -137,15 +142,13 @@ Connect picoagent to your favorite chat platform. It supports persistent session
 
 ```json
 {
-  "enabled_channels": ["telegram"],
-  "channel_tokens": {
-    "telegram": "YOUR_BOT_TOKEN"
-  },
-  "channel_settings": {
+  "channels": {
     "telegram": {
-      "allowed_chat_ids": ["YOUR_CHAT_ID"],
-      "reply_to_message": true,
-      "poll_seconds": 3
+      "enabled": true,
+      "token": "YOUR_BOT_TOKEN",
+      "allowFrom": ["YOUR_CHAT_ID"],
+      "replyToMessage": true,
+      "pollSeconds": 3
     }
   }
 }
@@ -166,15 +169,13 @@ picoagent gateway
 
 ```json
 {
-  "enabled_channels": ["discord"],
-  "channel_tokens": {
-    "discord": "YOUR_BOT_TOKEN"
-  },
-  "channel_settings": {
+  "channels": {
     "discord": {
-      "channel_id": "YOUR_CHANNEL_ID",
-      "reply_as_reply": true,
-      "poll_seconds": 3
+      "enabled": true,
+      "token": "YOUR_BOT_TOKEN",
+      "channelId": "YOUR_CHANNEL_ID",
+      "replyAsReply": true,
+      "pollSeconds": 3
     }
   }
 }
@@ -195,14 +196,12 @@ picoagent gateway
 
 ```json
 {
-  "enabled_channels": ["slack"],
-  "channel_tokens": {
-    "slack": "xoxb-YOUR_BOT_TOKEN"
-  },
-  "channel_settings": {
+  "channels": {
     "slack": {
-      "channel_id": "YOUR_CHANNEL_ID",
-      "poll_seconds": 3
+      "enabled": true,
+      "token": "xoxb-YOUR_BOT_TOKEN",
+      "channelId": "YOUR_CHANNEL_ID",
+      "pollSeconds": 3
     }
   }
 }
@@ -223,16 +222,16 @@ picoagent gateway
 
 ```json
 {
-  "enabled_channels": ["email"],
-  "channel_settings": {
+  "channels": {
     "email": {
+      "enabled": true,
       "username": "bot@example.com",
       "password": "app-password",
-      "imap_host": "imap.example.com",
-      "smtp_host": "smtp.example.com",
-      "imap_port": 993,
-      "smtp_port": 587,
-      "use_tls": true
+      "imapHost": "imap.example.com",
+      "smtpHost": "smtp.example.com",
+      "imapPort": 993,
+      "smtpPort": 587,
+      "useTls": true
     }
   }
 }
@@ -246,7 +245,7 @@ picoagent gateway
 
 </details>
 
-## ⚙️ Configuration
+## Configuration
 
 Config file: `~/.picoagent/config.json`
 
@@ -274,14 +273,20 @@ Set your configuration like so:
 
 ```json
 {
-  "provider": "custom",
-  "base_url": "https://api.your-provider.com/v1",
-  "chat_model": "your-model-name",
-  "api_key": "your-api-key"
+  "providers": {
+    "custom": {
+      "apiKey": "your-api-key",
+      "apiBase": "https://api.your-provider.com/v1"
+    }
+  },
+  "agents": {
+    "provider": "custom",
+    "model": "your-model-name"
+  }
 }
 ```
 
-> For local servers that don't require a key, set `api_key` to any non-empty string (e.g. `"no-key"`).
+> For local servers that don't require a key, set `providers.custom.apiKey` to any non-empty string (e.g. `"no-key"`).
 
 </details>
 
@@ -344,13 +349,16 @@ At startup, picoagent fetches `tools/list` from each configured server and auto-
 | `restrict_to_workspace` | `true`| Prevents path traversal out of the workspace root and blocks destructive command patterns. |
 | `shell_path_append` | `""` | Specifically allows isolated custom shell commands `/usr/sbin` without polluting the global environment. |
 
-## 🖥️ CLI Reference
+## CLI Reference
 
 | `picoagent onboard` | Create `~/.picoagent/config.json` |
 | `picoagent agent` | Start interactive CLI chat |
 | `picoagent gateway` | Start background gateway adapters (Telegram, Slack, etc.) |
 | `picoagent providers` | List registered provider schemas |
 | `picoagent tools` | List enabled tools |
+| `picoagent doctor` | Run health checks for config, provider, channels, and files |
+| `picoagent prune-memory --older-than N` | Remove old vector memories older than N days |
+| `picoagent threshold-stats` | Show adaptive threshold performance and win rate |
 | `picoagent mcp` | Run a stdio MCP server outward, exposing the tool registry |
 | `picoagent import-skills --source <dir>` | Import nanobot-style `SKILL.md` folders to your workspace |
 | `picoagent install-skill <user/repo>` | Install a skill directly from GitHub |
@@ -371,7 +379,7 @@ picoagent will periodically trigger `heartbeat.py`. The gateway wakes up and che
 
 </details>
 
-## 🐳 Docker Deployment
+## Docker Deployment
 
 You can deploy `picoagent` easily via Docker using the provided `docker-compose.yml`.
 
@@ -387,7 +395,7 @@ docker compose logs -f
 ```
 Your configuration and memory files will be safely persisted in `~/.picoagent` on your host machine.
 
-## 🐧 Linux Service
+## Linux Service
 
 Run the gateway as a systemd user service so it starts automatically and restarts on failure.
 
@@ -418,31 +426,31 @@ systemctl --user enable --now picoagent-gateway
 ```
 
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 picoagent/
-├── agent/            # 🧠 Core Agent Engine
+├── agent/            # Core agent engine
 │   ├── loop.py       #    Agent execution Loop & Entropy Math
 │   ├── context.py    #    Dynamic System Prompt builder
 │   ├── subagents.py  #    Subagent task execution
 │   └── tools/        #    Built-in safe tools
-├── core/             # 🧮 Intelligence Math Layer
+├── core/             # Intelligence math layer
 │   ├── scheduler.py  #    Information Entropy routing
 │   ├── memory.py     #    Vector Embeddings (NumPy)
 │   ├── dual_memory.py#    LLM-powered semantic Markdown consolidation
 │   └── adaptive.py   #    Dynamic Confidence threshold sliding
-├── skills/           # 🎯 Markdown YAML capability loader
-├── channels/         # 📱 External chat gateway integrations
-├── providers/        # 🤖 LLM provider APIs
-├── config.py         # ⚙️ Configuration models
-├── mcp.py            # 🔌 Model Context Protocol Server
-├── heartbeat.py      # 💓 Proactive wake-ups
-├── cron.py           # ⏰ Standard POSIX interval executor
-└── cli.py            # 🖥️ Terminal Commands
+├── skills/           # Markdown YAML capability loader
+├── channels/         # External chat gateway integrations
+├── providers/        # LLM provider APIs
+├── config.py         # Configuration models
+├── mcp.py            # Model Context Protocol server
+├── heartbeat.py      # Proactive wake-ups
+├── cron.py           # POSIX interval executor
+└── cli.py            # Terminal commands
 ```
 
-## 🤝 Roadmap
+## Roadmap
 
 The codebase is engineered specifically for correctness and readability. 
 
@@ -458,6 +466,6 @@ The codebase is engineered specifically for correctness and readability.
 - [ ] **Multi-modal Support** — Allow the agent to properly parse Images and Audio across channels.
 - [ ] **Expanded Workspace Restrictions** — More fine-grained Docker-level sandboxing inside the `ShellTool`.
 
-## 📄 License
+## License
 
 MIT

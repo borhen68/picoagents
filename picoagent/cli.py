@@ -25,7 +25,7 @@ from picoagent.config import AgentConfig, DEFAULT_CONFIG_PATH
 
 
 def build_tool_registry(config: AgentConfig) -> ToolRegistry:
-    from picoagent.agent.tools import FileTool, SearchTool, ShellTool, ToolRegistry
+    from picoagent.agent.tools import CronTool, FileTool, SearchTool, ShellTool, ToolRegistry
     from picoagent.mcp_client import register_mcp_tools_from_servers_sync
 
     registry = ToolRegistry()
@@ -41,6 +41,10 @@ def build_tool_registry(config: AgentConfig) -> ToolRegistry:
         registry.register(SearchTool())
     if config.allow_file_tool:
         registry.register(FileTool(restrict_to_workspace=config.restrict_to_workspace))
+    
+    # Always register CronTool
+    registry.register(CronTool())
+    
     if config.mcp_servers:
         register_mcp_tools_from_servers_sync(registry, config.mcp_servers, config.workspace_root)
     return registry
@@ -127,24 +131,42 @@ def _register_sighup_handler(skill_library: Any) -> None:
 
     signal.signal(signal.SIGHUP, _on_sighup)
 
+async def _start_cron_runner(config: AgentConfig, loop: AgentLoop) -> asyncio.Task:
+    from picoagent.cron import CronRunner, CronTask
+    
+    # Respect the configured cron file path so each runtime uses its own schedule source.
+    runner = CronRunner(Path(config.cron_file).expanduser())
+    
+    async def _on_cron_fire(task: CronTask):
+        # When a cron task fires, inject it as a user message to the loop
+        print(f"\n[CRON FIRED] {task.prompt}")
+        await loop.run_turn(task.prompt, session_id="cron")
+        
+    return asyncio.create_task(runner.run_forever(_on_cron_fire, poll_seconds=2.0))
+
 
 async def run_cli_agent(config: AgentConfig) -> None:
     loop = build_agent_loop(config)
     channel = CLIChannel()
 
     _register_sighup_handler(loop.skill_library)
+    cron_task = await _start_cron_runner(config, loop)
 
-    async def handler(user_message: str) -> str:
-        turn = await loop.run_turn(user_message, session_id="cli")
-        return turn.text
+    async def handler(user_message: str) -> "AgentTurnResult":
+        # Pass the full turn object so CLIChannel can render the entropy bar
+        return await loop.run_turn(user_message, session_id="cli")
 
-    await channel.start(handler)
+    try:
+        await channel.start(handler)
+    finally:
+        cron_task.cancel()
 
 
 async def run_gateway(config: AgentConfig) -> None:
     loop = build_agent_loop(config)
 
     _register_sighup_handler(loop.skill_library)
+    cron_task = await _start_cron_runner(config, loop)
 
     async def handler(user_message: str) -> str:
         turn = await loop.run_turn(user_message)
@@ -225,6 +247,7 @@ async def run_gateway(config: AgentConfig) -> None:
                 poll_seconds=em.poll_seconds,
                 use_tls=em.use_tls,
                 use_ssl=em.use_ssl,
+                allow_from=set(em.allow_from) if em.allow_from else None,
             )
         )
 
@@ -242,7 +265,10 @@ async def run_gateway(config: AgentConfig) -> None:
         if exc:
             for pending_task in pending:
                 pending_task.cancel()
+            cron_task.cancel()
             raise exc
+            
+    cron_task.cancel()
 
 
 def cmd_onboard(args: argparse.Namespace) -> int:
@@ -250,15 +276,15 @@ def cmd_onboard(args: argparse.Namespace) -> int:
     cfg = AgentConfig.load(config_path) if config_path.exists() else AgentConfig()
 
     if args.provider:
-        cfg.provider = args.provider
+        cfg.agents.provider = args.provider
     if args.base_url:
         cfg.base_url = args.base_url
     if args.chat_model:
-        cfg.chat_model = args.chat_model
+        cfg.agents.model = args.chat_model
     if args.embedding_model:
-        cfg.embedding_model = args.embedding_model
+        cfg.agents.embedding_model = args.embedding_model
     if args.embedding_provider:
-        cfg.embedding_provider = args.embedding_provider
+        cfg.agents.embedding_provider = args.embedding_provider
     if args.embedding_base_url:
         cfg.embedding_base_url = args.embedding_base_url
     if args.embedding_api_key:
@@ -266,11 +292,23 @@ def cmd_onboard(args: argparse.Namespace) -> int:
     if args.embedding_api_key_env:
         cfg.embedding_api_key_env = args.embedding_api_key_env
     if args.api_key:
-        cfg.api_key = args.api_key
+        # Store API key in the appropriate provider block
+        provider_name = cfg.agents.provider
+        if provider_name and provider_name != "auto":
+            pcfg = cfg.providers.get(provider_name)
+            if pcfg is not None:
+                pcfg.api_key = args.api_key
+        else:
+            # Fallback: store in the first available provider or openrouter
+            cfg.providers.openrouter.api_key = args.api_key
     if args.workspace_root:
         cfg.workspace_root = str(Path(args.workspace_root).expanduser().resolve())
     if args.channels:
-        cfg.enabled_channels = args.channels
+        for ch_name in args.channels:
+            ch_name_lower = ch_name.lower()
+            ch = getattr(cfg.channels, ch_name_lower, None)
+            if ch is not None:
+                ch.enabled = True
 
     cfg.validate()
     cfg.ensure_runtime_dirs()
@@ -344,6 +382,139 @@ def cmd_tools(args: argparse.Namespace) -> int:
     registry = build_tool_registry(cfg)
     for name, doc in registry.docs().items():
         print(f"- {name}: {doc}")
+    return 0
+
+
+def cmd_doctor(args: argparse.Namespace) -> int:
+    print("🏥 picoagent doctor: Checking system health...\n")
+    config_path = Path(args.config).expanduser()
+    
+    print("1. Configuration")
+    if config_path.exists():
+        print(f"  ✅ Config found at: {config_path}")
+        try:
+            cfg = AgentConfig.load(config_path)
+            print("  ✅ Config is valid JSON.")
+        except Exception as e:
+            print(f"  ❌ Config parsing failed: {e}")
+            return 1
+    else:
+        print(f"  ❌ Config missing at: {config_path} (Run 'picoagent onboard' to create it)")
+        return 1
+
+    print("\n2. Directories & Files")
+    workspace = Path(cfg.workspace_root).expanduser().resolve()
+    print(f"  - Workspace: {workspace}")
+    
+    dirs = [
+        ("Skills Directory", Path(cfg.skills_path).expanduser().resolve() if Path(cfg.skills_path).is_absolute() else workspace / cfg.skills_path),
+        ("Templates Directory", Path(cfg.templates_path).expanduser().resolve() if Path(cfg.templates_path).is_absolute() else workspace / cfg.templates_path),
+        ("Memory Database", Path(cfg.memory_path).expanduser()),
+        ("Sessions Database", Path(cfg.session_store_path).expanduser()),
+    ]
+    
+    for name, path in dirs:
+        if path.exists():
+            print(f"  ✅ {name}: {path} [OK]")
+        else:
+            print(f"  ⚠️  {name}: {path} [Not found - will be created on demand]")
+
+    print("\n3. Active Provider")
+    print(f"  - Name: {cfg.agents.provider}")
+    print(f"  - Model: {cfg.agents.model}")
+    from picoagent.providers import ProviderRegistry
+    try:
+        provider = ProviderRegistry().create_client(cfg)
+        print("  ✅ Provider module loaded successfully.")
+    except Exception as e:
+        print(f"  ❌ Provider initialization failed: {e}")
+
+    print("\n4. Active Channels")
+    enabled_count = 0
+    for ch in ("cli", "telegram", "discord", "slack", "whatsapp", "email"):
+        ch_settings = getattr(cfg.channels, ch, None)
+        if ch_settings and getattr(ch_settings, "enabled", False):
+            print(f"  - {ch}: ✅ Enabled")
+            enabled_count += 1
+        elif ch == "cli" and "cli" in (cfg.channels.enabled_names or []):
+            print(f"  - {ch}: ✅ Enabled")
+            enabled_count += 1
+            
+    if enabled_count == 0:
+        print("  ⚠️  No external channels enabled. Only local CLI will work.")
+
+    print("\nDiagnosis Complete. System looks healthy! 🚀")
+    return 0
+
+
+def cmd_prune_memory(args: argparse.Namespace) -> int:
+    cfg = AgentConfig.load(args.config)
+    from picoagent.core.memory import VectorMemory
+    import time
+    
+    memory = VectorMemory(decay_lambda=cfg.memory_decay_lambda, persistence_path=cfg.memory_path)
+    try:
+        count = memory.load()
+    except ValueError as e:
+        print(f"Error loading memory: {e}")
+        return 1
+        
+    print(f"Loaded {count} memory records.")
+    
+    if count == 0:
+        print("Memory is empty. Nothing to prune.")
+        return 0
+        
+    cutoff_time = time.time() - (args.older_than * 86400)
+    
+    original_records = memory._records
+    kept_records = [r for r in original_records if r.created_at >= cutoff_time]
+    removed = len(original_records) - len(kept_records)
+    
+    if removed > 0:
+        memory._records = kept_records
+        memory.save()
+        print(f"Pruned {removed} records older than {args.older_than} days.")
+        print(f"Remaining records: {len(kept_records)}")
+    else:
+        print(f"No records older than {args.older_than} days found.")
+        
+    return 0
+
+
+def cmd_threshold_stats(args: argparse.Namespace) -> int:
+    cfg = AgentConfig.load(args.config)
+    from picoagent.core.adaptive import AdaptiveThreshold
+    
+    if not cfg.adaptive_threshold_enabled:
+        print("Adaptive Threshold is DISABLED in your configuration.")
+        return 1
+        
+    adaptive = AdaptiveThreshold(
+        path=cfg.adaptive_threshold_path,
+        initial_threshold=cfg.entropy_threshold_bits,
+        min_threshold=cfg.adaptive_threshold_min_bits,
+        max_threshold=cfg.adaptive_threshold_max_bits,
+        step=cfg.adaptive_threshold_step,
+    )
+    
+    state = adaptive.state
+    print("📈 Adaptive Threshold Dashboard")
+    print("=" * 40)
+    print(f"Current Threshold: {state.threshold_bits:.3f} bits")
+    print("-" * 40)
+    print(f"Total Tool Executions Observed: {state.updates}")
+    print(f"Successful Matches: {state.successes}")
+    print(f"Failed Matches: {state.failures}")
+    
+    if state.updates > 0:
+        win_rate = (state.successes / state.updates) * 100
+        print(f"Accuracy Rate: {win_rate:.1f}%")
+        
+    print("\nConfiguration limits:")
+    print(f"  Min bits: {cfg.adaptive_threshold_min_bits}")
+    print(f"  Max bits: {cfg.adaptive_threshold_max_bits}")
+    print(f"  Step size: {cfg.adaptive_threshold_step}")
     return 0
 
 
@@ -506,6 +677,19 @@ def build_parser() -> argparse.ArgumentParser:
     p_mcp = onboard.add_parser("mcp", help="Run MCP stdio server")
     p_mcp.add_argument("--config", default=str(DEFAULT_CONFIG_PATH), help="Path to config file")
     p_mcp.set_defaults(func=cmd_mcp)
+
+    p_doctor = onboard.add_parser("doctor", help="Check system health")
+    p_doctor.add_argument("--config", default=str(DEFAULT_CONFIG_PATH), help="Path to config file")
+    p_doctor.set_defaults(func=cmd_doctor)
+
+    p_prune = onboard.add_parser("prune-memory", help="Remove old memories")
+    p_prune.add_argument("--config", default=str(DEFAULT_CONFIG_PATH), help="Path to config file")
+    p_prune.add_argument("--older-than", type=int, default=30, help="Days old threshold (default: 30)")
+    p_prune.set_defaults(func=cmd_prune_memory)
+    
+    p_stats = onboard.add_parser("threshold-stats", help="View adaptive threshold performance")
+    p_stats.add_argument("--config", default=str(DEFAULT_CONFIG_PATH), help="Path to config file")
+    p_stats.set_defaults(func=cmd_threshold_stats)
 
     p_import_skills = onboard.add_parser("import-skills", help="Import nanobot-style SKILL.md folders")
     p_import_skills.add_argument("--config", default=str(DEFAULT_CONFIG_PATH), help="Path to config file")

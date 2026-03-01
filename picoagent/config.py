@@ -275,6 +275,7 @@ class EmailChannelConfig:
     use_tls: bool = True
     use_ssl: bool = False
     poll_seconds: float = 30.0
+    allow_from: list[str] = field(default_factory=list)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "EmailChannelConfig":
@@ -291,6 +292,7 @@ class EmailChannelConfig:
             use_tls=bool(data.get("useTls", data.get("use_tls", True))),
             use_ssl=bool(data.get("useSsl", data.get("use_ssl", False))),
             poll_seconds=float(data.get("pollSeconds", data.get("poll_seconds", 30.0))),
+            allow_from=[str(x) for x in (data.get("allowFrom") or data.get("allow_from") or [])],
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -307,6 +309,7 @@ class EmailChannelConfig:
             "useTls": self.use_tls,
             "useSsl": self.use_ssl,
             "pollSeconds": self.poll_seconds,
+            "allowFrom": self.allow_from,
         }
 
 
@@ -569,6 +572,11 @@ class AgentConfig:
         config_path = Path(path).expanduser()
         config_path.parent.mkdir(parents=True, exist_ok=True)
         config_path.write_text(json.dumps(self.to_dict(), indent=2), encoding="utf-8")
+        # Restrict permissions to owner-only (0600) since config may contain API keys
+        try:
+            config_path.chmod(0o600)
+        except OSError:
+            pass  # Windows or other OS may not support chmod
         return config_path
 
     def ensure_runtime_dirs(self) -> None:
@@ -646,7 +654,7 @@ def _migrate_config(data: dict[str, Any]) -> dict[str, Any]:
 
     # --- Agents migration ---
     agents = dict(data.get("agents") or {})
-    if not agents.get("model") and not agents.get("model"):
+    if not agents.get("model"):
         old_model = str(data.get("chat_model") or "").strip()
         if old_model:
             agents["model"] = old_model

@@ -212,19 +212,28 @@ class MCPServerSession:
             proc.stdin.flush()
 
             deadline = time.time() + timeout
-            while True:
-                remaining = deadline - time.time()
-                if remaining <= 0:
-                    raise TimeoutError(f"timeout waiting for MCP response to method '{method}'")
+            deferred: list[dict[str, Any]] = []
+            try:
+                while True:
+                    remaining = deadline - time.time()
+                    if remaining <= 0:
+                        raise TimeoutError(f"timeout waiting for MCP response to method '{method}'")
 
-                try:
-                    message = self._responses.get(timeout=remaining)
-                except queue.Empty as exc:
-                    raise TimeoutError(f"timeout waiting for MCP response to method '{method}'") from exc
+                    try:
+                        message = self._responses.get(timeout=remaining)
+                    except queue.Empty as exc:
+                        raise TimeoutError(f"timeout waiting for MCP response to method '{method}'") from exc
 
-                msg_id = message.get("id")
-                if msg_id == request_id:
-                    return message
+                    msg_id = message.get("id")
+                    if msg_id == request_id:
+                        return message
+                    # Not our response — defer it so other callers can find it
+                    if msg_id is not None:
+                        deferred.append(message)
+            finally:
+                # Re-queue any deferred messages
+                for msg in deferred:
+                    self._responses.put(msg)
 
     def _reader_loop(self) -> None:
         proc = self._proc

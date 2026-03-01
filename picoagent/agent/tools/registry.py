@@ -18,6 +18,7 @@ class ToolResult:
 class ToolContext:
     workspace_root: Path
     session_id: str | None = None
+    cron_file: Path | None = None
 
 
 class Tool(Protocol):
@@ -30,9 +31,10 @@ class Tool(Protocol):
 
 
 class ToolRegistry:
-    def __init__(self, cache_ttl: float = 60.0) -> None:
+    def __init__(self, cache_ttl: float = 60.0, max_cache_size: int = 256) -> None:
         self._tools: dict[str, Tool] = {}
         self.cache_ttl = float(cache_ttl)
+        self.max_cache_size = max_cache_size
         # Cache: key -> (ToolResult, timestamp)
         self._cache: dict[tuple[str, str], tuple[ToolResult, float]] = {}
 
@@ -69,12 +71,18 @@ class ToolRegistry:
         return result
 
     def _set_cached(self, tool_name: str, args: dict[str, Any], result: ToolResult) -> None:
-        """Store a successful result in the cache."""
+        """Store a successful result in the cache, evicting oldest entries if over limit."""
         try:
             key = (tool_name, json.dumps(args, sort_keys=True))
         except (TypeError, ValueError):
             return
         self._cache[key] = (result, time.time())
+        # Evict oldest entries if cache exceeds max size
+        if len(self._cache) > self.max_cache_size:
+            sorted_keys = sorted(self._cache, key=lambda k: self._cache[k][1])
+            evict_count = len(self._cache) - self.max_cache_size
+            for k in sorted_keys[:evict_count]:
+                del self._cache[k]
 
     async def run(self, name: str, args: dict[str, Any], context: ToolContext) -> ToolResult:
         tool = self.get(name)

@@ -245,21 +245,5 @@ class TelegramChannel:
 
 
 def _split_message(content: str, max_len: int = 3900) -> list[str]:
-    text = content or ""
-    if len(text) <= max_len:
-        return [text]
-
-    chunks: list[str] = []
-    while text:
-        if len(text) <= max_len:
-            chunks.append(text)
-            break
-        head = text[:max_len]
-        cut = head.rfind("\n")
-        if cut <= 0:
-            cut = head.rfind(" ")
-        if cut <= 0:
-            cut = max_len
-        chunks.append(text[:cut])
-        text = text[cut:].lstrip()
-    return chunks
+    from picoagent.channels.utils import split_message
+    return split_message(content, max_len=max_len)

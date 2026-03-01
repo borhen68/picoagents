@@ -110,13 +110,13 @@ class DiscordChannel:
         url = f"https://discord.com/api/v10{path}"
         body = json.dumps(payload).encode("utf-8") if payload is not None else None
 
-        req = urllib.request.Request(url, data=body, method=method)
-        req.add_header("Authorization", f"Bot {self.token}")
-        if payload is not None:
-            req.add_header("Content-Type", "application/json")
-
         attempts = 3 if allow_retry else 1
         for attempt in range(attempts):
+            # Recreate request each attempt to avoid stale state after retries
+            req = urllib.request.Request(url, data=body, method=method)
+            req.add_header("Authorization", f"Bot {self.token}")
+            if payload is not None:
+                req.add_header("Content-Type", "application/json")
             try:
                 with urllib.request.urlopen(req, timeout=self.timeout_seconds) as resp:
                     raw = resp.read().decode("utf-8")
@@ -193,23 +193,5 @@ def _extract_retry_after(raw_json: str) -> float:
 
 
 def _split_message(content: str, max_len: int = 1900) -> list[str]:
-    text = content or ""
-    if len(text) <= max_len:
-        return [text]
-
-    chunks: list[str] = []
-    while text:
-        if len(text) <= max_len:
-            chunks.append(text)
-            break
-        # Try to split on a newline boundary within the limit
-        cut = text.rfind("\n", 0, max_len + 1)
-        if cut <= 0:
-            # Try to split on a space boundary within the limit
-            cut = text.rfind(" ", 0, max_len + 1)
-        if cut <= 0:
-            # No word boundary found — hard cut
-            cut = max_len
-        chunks.append(text[:cut])
-        text = text[cut:].lstrip()
-    return chunks
+    from picoagent.channels.utils import split_message
+    return split_message(content, max_len=max_len)

@@ -86,7 +86,10 @@ class SessionManager:
         payload = {
             "sessions": [session.to_dict() for session in self._sessions.values()],
         }
-        self.path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+        # Atomic write: write to temp file then rename to avoid corruption on crash
+        tmp_path = self.path.with_suffix(".tmp")
+        tmp_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+        tmp_path.replace(self.path)
 
     def load(self) -> None:
         if self.path is None or not self.path.exists():

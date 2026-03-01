@@ -28,6 +28,7 @@ class AgentTurnResult:
     decision: ToolDecision
     active_skills: list[str] = field(default_factory=list)
     subagent_note: str | None = None
+    threshold_bits: float = 0.0
 
 
 class AgentLoop:
@@ -79,6 +80,20 @@ class AgentLoop:
             self.session_manager.save_session(session)
 
         active_skill_names: list[str] = []
+        if self._asks_memory_storage(user_message):
+            text = self._build_memory_storage_response()
+            decision = ToolDecision(tool_name=None, entropy_bits=0.0, probabilities={}, should_clarify=False)
+            self._finalize_session_turn(session, text)
+            await hooks.fire("on_turn_end", response=text, session_id=session_id)
+            return AgentTurnResult(
+                text=text,
+                selected_tool=None,
+                tool_args={},
+                tool_output="",
+                decision=decision,
+                active_skills=active_skill_names,
+                threshold_bits=0.0,
+            )
 
         try:
             try:
@@ -125,6 +140,7 @@ class AgentLoop:
                 tool_output="",
                 decision=decision,
                 active_skills=active_skill_names,
+                threshold_bits=self.config.entropy_threshold_bits, # Default fallback
             )
 
         heuristic = LocalHeuristicClient()
@@ -139,6 +155,7 @@ class AgentLoop:
                 tool_output="",
                 decision=ToolDecision(tool_name=None, entropy_bits=0.0, probabilities={}, should_clarify=False),
                 active_skills=active_skill_names,
+                threshold_bits=0.0,
             )
 
         try:
@@ -170,6 +187,7 @@ class AgentLoop:
                 tool_output="",
                 decision=decision,
                 active_skills=active_skill_names,
+                threshold_bits=threshold_bits,
             )
 
         tool_name = decision.tool_name
@@ -183,6 +201,13 @@ class AgentLoop:
 
         if not isinstance(tool_args, dict):
             tool_args = {}
+        heuristic_args: dict[str, object] | None = None
+
+        if tool_name == "cron":
+            guessed = heuristic.plan_tool_args(user_message, tool_name, tool_doc)
+            if isinstance(guessed, dict):
+                heuristic_args = guessed
+                tool_args = self._repair_cron_tool_args(tool_args, heuristic_args)
 
         # Repair invalid planned args before running tool validation path.
         try:
@@ -192,8 +217,10 @@ class AgentLoop:
         if isinstance(tool_schema, dict):
             validation_errors = validate_params(tool_args, tool_schema)
             if validation_errors:
-                fallback_args = heuristic.plan_tool_args(user_message, tool_name, tool_doc)
+                fallback_args = heuristic_args if isinstance(heuristic_args, dict) else heuristic.plan_tool_args(user_message, tool_name, tool_doc)
                 if isinstance(fallback_args, dict):
+                    if tool_name == "cron":
+                        fallback_args = self._repair_cron_tool_args(fallback_args, fallback_args)
                     # Validate fallback args through schema before accepting them
                     fallback_errors = validate_params(fallback_args, tool_schema)
                     if fallback_errors:
@@ -215,6 +242,7 @@ class AgentLoop:
                                 tool_output="",
                                 decision=decision,
                                 active_skills=active_skill_names,
+                                threshold_bits=threshold_bits,
                             )
                     else:
                         tool_args = fallback_args
@@ -236,12 +264,19 @@ class AgentLoop:
                     tool_output="",
                     decision=decision,
                     active_skills=active_skill_names,
+                    threshold_bits=threshold_bits,
                 )
             tool_args = {"command": command, **{k: v for k, v in tool_args.items() if k != "command"}}
 
-        context = ToolContext(workspace_root=Path(self.config.workspace_root), session_id=session_id)
+        context = ToolContext(
+            workspace_root=Path(self.config.workspace_root),
+            session_id=session_id,
+            cron_file=Path(self.config.cron_file).expanduser(),
+        )
         result_success = False
         max_tool_chain = 3
+        if tool_name == "cron":
+            max_tool_chain = 0
         chain_depth = 0
 
         try:
@@ -283,6 +318,9 @@ class AgentLoop:
                 break
             # Execute the chained tool
             chained_tool_name = chain_decision.tool_name
+            # Avoid chaining stateful schedule mutations.
+            if chained_tool_name == "cron":
+                break
             chained_tool_doc = tool_docs.get(chained_tool_name, "")
             try:
                 chained_args = self.provider.plan_tool_args(user_message, chained_tool_name, chained_tool_doc)
@@ -341,6 +379,7 @@ class AgentLoop:
             decision=decision,
             active_skills=active_skill_names,
             subagent_note=subagent_note,
+            threshold_bits=threshold_bits,
         )
 
     def _get_session(self, session_id: str | None) -> SessionState | None:
@@ -384,16 +423,30 @@ class AgentLoop:
             pass
 
         if getattr(self, "dual_memory", None):
-            import asyncio
-            from loguru import logger
-            logger.info("Scheduling dual-memory consolidation task for session {}", session.key)
-            asyncio.create_task(
+            import asyncio as _asyncio
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.info("Scheduling dual-memory consolidation task for session %s", session.key)
+
+            # Determine model name safely (provider may not expose get_default_model)
+            _model = getattr(self.provider, "chat_model", "unknown")
+            if callable(_model):
+                _model = _model()
+
+            task = _asyncio.create_task(
                 self.dual_memory.consolidate(
                     session=session,
                     provider=self.provider,
-                    model=self.provider.get_default_model(),
+                    model=_model,
                 )
             )
+
+            def _on_consolidation_done(t: _asyncio.Task) -> None:
+                exc = t.exception() if not t.cancelled() else None
+                if exc:
+                    logger.error("Dual-memory consolidation failed: %s", exc)
+
+            task.add_done_callback(_on_consolidation_done)
 
         session.last_consolidated = cut_index
 
@@ -407,6 +460,98 @@ class AgentLoop:
 
         joined = "\n".join(lines) if lines else "(no content)"
         return f"Session {session_key} summary ({len(messages)} messages):\n{joined}"
+
+    @staticmethod
+    def _asks_memory_storage(text: str) -> bool:
+        lowered = (text or "").strip().lower()
+        if not lowered:
+            return False
+        patterns = (
+            r"\bwhere\b.*\bsave\b.*\bmemory\b",
+            r"\bwhere\b.*\bmemory\b",
+            r"\bmemory\s*file\b",
+            r"\bmemory\s*path\b",
+            r"\bwhere\s+is\s+your\s+memory\b",
+        )
+        return any(re.search(pattern, lowered) for pattern in patterns)
+
+    def _build_memory_storage_response(self) -> str:
+        workspace_root = Path(self.config.workspace_root).expanduser().resolve()
+        memory_dir = workspace_root / self.config.dual_memory_dir
+        memory_file = memory_dir / "MEMORY.md"
+        history_file = memory_dir / "HISTORY.md"
+        vector_file = Path(self.config.memory_path).expanduser()
+        session_file = Path(self.config.session_store_path).expanduser()
+
+        lines = [
+            f"I store long-term memory in `{memory_file}`.",
+            f"I store searchable history in `{history_file}`.",
+            f"I also keep vector/session memory in `{vector_file}` and `{session_file}`.",
+        ]
+
+        facts = self._read_memory_fact_preview(memory_file, limit=3)
+        if facts:
+            lines.append("")
+            lines.append("Right now I remember:")
+            for fact in facts:
+                lines.append(f"- {fact}")
+        return "\n".join(lines)
+
+    @staticmethod
+    def _read_memory_fact_preview(memory_file: Path, *, limit: int = 3) -> list[str]:
+        if not memory_file.exists():
+            return []
+        facts: list[str] = []
+        for raw in memory_file.read_text(encoding="utf-8", errors="replace").splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#"):
+                continue
+            line = re.sub(r"^[-*]\s*", "", line).strip()
+            if line:
+                facts.append(line)
+            if len(facts) >= limit:
+                break
+        return facts
+
+    @staticmethod
+    def _repair_cron_tool_args(primary: dict[str, object], fallback: dict[str, object]) -> dict[str, object]:
+        merged: dict[str, object] = dict(primary)
+        fallback_dict = dict(fallback or {})
+
+        if "action" not in merged and "action" in fallback_dict:
+            merged["action"] = fallback_dict["action"]
+
+        action_value = merged.get("action")
+        action = str(action_value).strip().lower() if isinstance(action_value, str) else ""
+        if action != "add":
+            return merged
+
+        for key in ("message", "prompt", "text", "reminder", "reminder_message"):
+            value = merged.get(key)
+            if isinstance(value, str) and value.strip():
+                merged["message"] = value.strip()
+                break
+        else:
+            for key in ("message", "prompt", "text", "reminder", "reminder_message"):
+                value = fallback_dict.get(key)
+                if isinstance(value, str) and value.strip():
+                    merged["message"] = value.strip()
+                    break
+
+        every_keys = ("every_seconds", "everyseconds", "everySeconds", "interval_seconds", "intervalSeconds")
+        if all(k not in merged for k in every_keys):
+            for key in every_keys:
+                if key in fallback_dict:
+                    merged[key] = fallback_dict[key]
+                    break
+
+        if "every_seconds" not in merged:
+            for key in ("everyseconds", "everySeconds", "interval_seconds", "intervalSeconds"):
+                if key in merged:
+                    merged["every_seconds"] = merged[key]
+                    break
+
+        return merged
 
     @staticmethod
     def _looks_like_shell_command(text: str) -> bool:
@@ -476,7 +621,10 @@ class AgentLoop:
 
         if re.fullmatch(r"[a-z0-9._/\-]+", first) is None:
             return False
-        return len(raw.split()) > 1
+        parts = raw.split()
+        if len(parts) > 1 and parts[1].startswith("-"):
+            return True
+        return False
 
     @staticmethod
     def _should_reply_directly(text: str) -> bool:
@@ -485,21 +633,56 @@ class AgentLoop:
             return False
 
         lowered = raw.lower()
-        greetings = {
-            "hi",
-            "hello",
-            "hey",
-            "yo",
-            "sup",
-            "thanks",
-            "thank you",
-            "good morning",
-            "good afternoon",
-            "good evening",
-        }
-        if lowered in greetings:
+        # Handle common conversational openers, including punctuation variants (e.g., "hi, how are you?")
+        greeting_prefix = re.match(
+            r"^(hi|hello|hey|yo|sup|thanks|thank you)\b[\s,!.?:;-]*",
+            lowered,
+        )
+        if lowered in {"good morning", "good afternoon", "good evening"}:
             return True
-        if lowered.startswith(("hi ", "hello ", "hey ", "thanks ", "thank you ")):
+        if greeting_prefix:
+            remainder = lowered[greeting_prefix.end():].strip()
+            if not remainder:
+                return True
+            if AgentLoop._looks_like_shell_command(remainder):
+                return False
+            remainder_tokens = re.findall(r"[a-z0-9_]+", remainder)
+            if any(
+                t in {
+                    "run",
+                    "execute",
+                    "shell",
+                    "terminal",
+                    "command",
+                    "read",
+                    "write",
+                    "edit",
+                    "file",
+                    "folder",
+                    "path",
+                    "search",
+                    "lookup",
+                    "google",
+                    "web",
+                    "http",
+                    "https",
+                    "git",
+                    "python",
+                    "npm",
+                    "pip",
+                    "test",
+                    "build",
+                    "deploy",
+                    "debug",
+                    "fix",
+                    "remind",
+                    "cron",
+                    "timer",
+                    "schedule",
+                }
+                for t in remainder_tokens
+            ):
+                return False
             return True
 
         if AgentLoop._looks_like_shell_command(raw):
@@ -536,6 +719,10 @@ class AgentLoop:
             "deploy",
             "debug",
             "fix",
+            "remind",
+            "cron",
+            "timer",
+            "schedule",
         }
         if any(t in tool_intent for t in tokens):
             return False
@@ -543,6 +730,9 @@ class AgentLoop:
         path_hints = ("/", "\\", ".py", ".md", ".json", ".yaml", ".yml", ".txt")
         if any(h in lowered for h in path_hints):
             return False
+
+        if "how are you" in lowered or "how's it going" in lowered or "hows it going" in lowered:
+            return True
 
         return len(tokens) <= 3
 
