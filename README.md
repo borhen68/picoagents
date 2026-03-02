@@ -466,6 +466,11 @@ The codebase is engineered specifically for correctness and readability.
 - [ ] **Multi-modal Support** — Allow the agent to properly parse Images and Audio across channels.
 - [ ] **Expanded Workspace Restrictions** — More fine-grained Docker-level sandboxing inside the `ShellTool`.
 
+## Contributing and Security
+
+- Contribution guide: `CONTRIBUTING.md`
+- Security policy: `SECURITY.md`
+
 ## License
 
 MIT
